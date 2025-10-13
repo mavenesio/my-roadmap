@@ -41,43 +41,7 @@ const WEEKS = [
   { id: "W13", date: "22-12", month: "DICIEMBRE" },
 ]
 
-const INITIAL_TASKS: Task[] = [
-  {
-    id: "1",
-    name: "[GUARDIANS] IMPLEMENTAR SECURITY GUARDIANS ACCELERATORS PARA ALCANZAR 500 GUARDIANS HACKER",
-    priority: "Milestone",
-    weeks: ["W4", "W5", "W6", "W7"],
-    assignments: WEEKS.map((week) => ({ weekId: week.id, assignees: [] })),
-  },
-  {
-    id: "2",
-    name: "[GUARDIANS] REALIZAR CIERRE DE MISIONES 2025 y PREMIACIÓN",
-    priority: "1",
-    weeks: ["W6", "W7", "W9"],
-    assignments: WEEKS.map((week) => ({ weekId: week.id, assignees: [] })),
-  },
-  {
-    id: "3",
-    name: "[GUARDIANS] DISEÑAR E IMPLEMENTAR WORKFLOW PARA RECOLECTAR INFORMACION SOBRE EL ROADMAP DEL SIGUIENTE Q",
-    priority: "2",
-    weeks: ["W6", "W7"],
-    assignments: WEEKS.map((week) => ({ weekId: week.id, assignees: [] })),
-  },
-  {
-    id: "4",
-    name: "[GUARDIANS] IMPLEMENTAR GENERADOR DE MISIONES AUTOMATICAS A PARTIR DEL ROADMAP",
-    priority: "2",
-    weeks: ["W8", "W9"],
-    assignments: WEEKS.map((week) => ({ weekId: week.id, assignees: [] })),
-  },
-  {
-    id: "5",
-    name: "[GUARDIANS] CARGA DE NUEVAS MISIONES Y AJUSTE DE MELISAMM",
-    priority: "3",
-    weeks: ["W11", "W12", "W13"],
-    assignments: WEEKS.map((week) => ({ weekId: week.id, assignees: [] })),
-  },
-]
+const INITIAL_TASKS: Task[] = []
 
 export function RoadmapGantt() {
   const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS)
@@ -194,6 +158,36 @@ export function RoadmapGantt() {
 
   const months = ["OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]
 
+  const getMonthSummary = (task: Task, month: string) => {
+    const monthWeeks = getMonthWeeks(month)
+    const assigneeCounts = new Map<string, number>()
+
+    monthWeeks.forEach((week) => {
+      const assignment = task.assignments.find((a) => a.weekId === week.id)
+      assignment?.assignees.forEach((assignee) => {
+        assigneeCounts.set(assignee, (assigneeCounts.get(assignee) || 0) + 1)
+      })
+    })
+
+    return Array.from(assigneeCounts.entries()).map(([assignee, count]) => ({
+      name: assignee.split(" ")[0],
+      weeks: count,
+    }))
+  }
+
+  const getGridColumns = () => {
+    const columns = ["400px"]
+    months.forEach((month) => {
+      if (collapsedMonths.has(month)) {
+        columns.push("120px") // Summary column width
+      } else {
+        const monthWeeks = getMonthWeeks(month)
+        monthWeeks.forEach(() => columns.push("80px"))
+      }
+    })
+    return columns.join(" ")
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -216,19 +210,12 @@ export function RoadmapGantt() {
       <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <div className="min-w-[1400px]">
           {/* Header */}
-          <div
-            className="grid border-b border-border bg-muted/50"
-            style={{
-              gridTemplateColumns: `400px ${WEEKS.map((week) => (collapsedMonths.has(week.month) ? "0px" : "80px")).join(" ")}`,
-            }}
-          >
+          <div className="grid border-b border-border bg-muted/50" style={{ gridTemplateColumns: getGridColumns() }}>
             <div className="border-r border-border p-4 font-semibold">TASK</div>
             {months.map((month) => {
               const monthWeeks = getMonthWeeks(month)
               const isCollapsed = collapsedMonths.has(month)
-              const colSpan = isCollapsed ? 0 : monthWeeks.length
-
-              if (isCollapsed) return null
+              const colSpan = isCollapsed ? 1 : monthWeeks.length
 
               return (
                 <div
@@ -238,29 +225,32 @@ export function RoadmapGantt() {
                   onClick={() => toggleMonth(month)}
                 >
                   {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  {month}
+                  {isCollapsed ? month.substring(0, 3) : month}
                 </div>
               )
             })}
           </div>
 
           {/* Week headers */}
-          <div
-            className="grid border-b border-border bg-muted/30"
-            style={{
-              gridTemplateColumns: `400px ${WEEKS.map((week) => (collapsedMonths.has(week.month) ? "0px" : "80px")).join(" ")}`,
-            }}
-          >
+          <div className="grid border-b border-border bg-muted/30" style={{ gridTemplateColumns: getGridColumns() }}>
             <div className="border-r border-border"></div>
-            {WEEKS.map((week) => {
-              if (collapsedMonths.has(week.month)) return null
+            {months.map((month) => {
+              const isCollapsed = collapsedMonths.has(month)
+              if (isCollapsed) {
+                return (
+                  <div key={month} className="border-r border-border p-2 text-center text-xs">
+                    <div className="text-muted-foreground">Summary</div>
+                  </div>
+                )
+              }
 
-              return (
+              const monthWeeks = getMonthWeeks(month)
+              return monthWeeks.map((week) => (
                 <div key={week.id} className="border-r border-border p-2 text-center text-xs">
                   <div className="font-medium">{week.date}</div>
                   <div className="text-muted-foreground">{week.id}</div>
                 </div>
-              )
+              ))
             })}
           </div>
 
@@ -269,9 +259,7 @@ export function RoadmapGantt() {
             <div
               key={task.id}
               className="grid border-b border-border hover:bg-muted/30"
-              style={{
-                gridTemplateColumns: `400px ${WEEKS.map((week) => (collapsedMonths.has(week.month) ? "0px" : "80px")).join(" ")}`,
-              }}
+              style={{ gridTemplateColumns: getGridColumns() }}
             >
               <div className="border-r border-border p-4">
                 <div className="flex items-start gap-2">
@@ -279,47 +267,70 @@ export function RoadmapGantt() {
                   <div className="flex-1 text-sm leading-relaxed">{task.name}</div>
                 </div>
               </div>
-              {WEEKS.map((week) => {
-                if (collapsedMonths.has(week.month)) return null
+              {months.map((month) => {
+                const isCollapsed = collapsedMonths.has(month)
+                if (isCollapsed) {
+                  const summary = getMonthSummary(task, month)
+                  return (
+                    <div key={month} className="flex flex-wrap gap-1 border-r border-border p-2">
+                      {summary.length > 0 ? (
+                        summary.map((item) => (
+                          <Badge
+                            key={item.name}
+                            variant="secondary"
+                            className="bg-cyan-500 text-white hover:bg-cyan-600 text-[10px] px-2 py-0.5"
+                          >
+                            {item.name} {item.weeks}W
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </div>
+                  )
+                }
 
-                const assignment = task.assignments.find((a) => a.weekId === week.id)
-                const assignees = assignment?.assignees || []
-                const canAddMore = assignees.length < 2
+                const monthWeeks = getMonthWeeks(month)
+                return monthWeeks.map((week) => {
+                  const assignment = task.assignments.find((a) => a.weekId === week.id)
+                  const assignees = assignment?.assignees || []
+                  const canAddMore = assignees.length < 2
 
-                return (
-                  <div key={week.id} className="flex flex-col gap-1 border-r border-border p-1">
-                    {assignees.map((assignee) => (
-                      <Badge
-                        key={assignee}
-                        variant="secondary"
-                        className="flex items-center justify-between gap-1 bg-cyan-500 text-white hover:bg-cyan-600 text-[10px] px-1 py-0.5"
-                      >
-                        <span className="truncate">{assignee.split(" ")[0]}</span>
-                        <button
-                          onClick={() => handleRemoveAssignee(task.id, week.id, assignee)}
-                          className="hover:bg-cyan-700 rounded-sm p-0.5"
+                  return (
+                    <div key={week.id} className="flex flex-col gap-1 border-r border-border p-1">
+
+                      {canAddMore && (
+                        <Select onValueChange={(value) => handleAddAssignee(task.id, week.id, value)}>
+                          <SelectTrigger className="h-6 w-full border-0 bg-gray-100 hover:bg-gray-200 text-[10px] focus:ring-0">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TEAM_MEMBERS.filter((member) => !assignees.includes(member)).map((member) => (
+                              <SelectItem key={member} value={member} className="text-xs">
+                                {member}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {assignees.map((assignee) => (
+                        <Badge
+                          key={assignee}
+                          variant="secondary"
+                          className="flex items-center justify-between gap-1 bg-cyan-500 text-white hover:bg-cyan-600 text-[10px] px-1 py-0.5"
                         >
-                          <X className="h-2.5 w-2.5" />
-                        </button>
-                      </Badge>
-                    ))}
-
-                    {canAddMore && (
-                      <Select onValueChange={(value) => handleAddAssignee(task.id, week.id, value)}>
-                        <SelectTrigger className="h-6 w-full border-0 bg-gray-100 hover:bg-gray-200 text-[10px] focus:ring-0">
-                          <SelectValue placeholder="+" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TEAM_MEMBERS.filter((member) => !assignees.includes(member)).map((member) => (
-                            <SelectItem key={member} value={member} className="text-xs">
-                              {member}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                )
+                          <span className="truncate">{assignee.split(" ")[0]}</span>
+                          <button
+                            onClick={() => handleRemoveAssignee(task.id, week.id, assignee)}
+                            className="hover:bg-cyan-700 rounded-sm p-0.5"
+                          >
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )
+                })
               })}
             </div>
           ))}
