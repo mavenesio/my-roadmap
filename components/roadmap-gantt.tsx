@@ -24,7 +24,7 @@ interface Task {
   assignments: WeekAssignment[]
 }
 
-const TEAM_MEMBERS = ["Ana García", "Carlos Ruiz", "María López", "Juan Pérez", "Sofia Martínez"]
+const TEAM_MEMBERS = ["Sofi", "Nico", "Kai", "Ste", "Peter", "Gabo", "Chiqui", "Marian"]
 
 const WEEKS = [
   { id: "W2", date: "06-10", month: "OCTUBRE" },
