@@ -6,8 +6,8 @@ export default function RoadmapPage() {
     <div className="min-h-screen bg-background p-6">
       <div className="mx-auto max-w-[1600px] space-y-8">
         <div>
-          <h1 className="text-4xl font-bold text-foreground">Team Roadmap - Q4</h1>
-          <p className="mt-2 text-muted-foreground">Gantt chart of the team's weekly tasks for the specific quarter.</p>
+          <h1 className="text-4xl font-bold text-foreground">Team Roadmap</h1>
+          <p className="mt-2 text-muted-foreground">Gantt chart of the team's weekly tasks for the selected quarter.</p>
         </div>
 
         <RoadmapGantt />

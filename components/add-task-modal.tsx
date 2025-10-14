@@ -19,15 +19,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus } from "lucide-react"
 
 type Priority = "Milestone" | "1" | "2" | "3"
+type Track = "Swiper" | "TM" | "Guardians"
 
 interface AddTaskModalProps {
-  onAddTask: (task: { name: string; priority: Priority }) => void
+  onAddTask: (task: { name: string; priority: Priority; track: Track }) => void
 }
 
 export function AddTaskModal({ onAddTask }: AddTaskModalProps) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [priority, setPriority] = useState<Priority>("1")
+  const [track, setTrack] = useState<Track>("Swiper")
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -35,9 +37,11 @@ export function AddTaskModal({ onAddTask }: AddTaskModalProps) {
       onAddTask({
         name: name.trim(),
         priority,
+        track,
       })
       setName("")
       setPriority("1")
+      setTrack("Swiper")
       setOpen(false)
     }
   }
@@ -68,19 +72,34 @@ export function AddTaskModal({ onAddTask }: AddTaskModalProps) {
                 required
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="priority">Priority</Label>
-              <Select value={priority} onValueChange={(value) => setPriority(value as Priority)}>
-                <SelectTrigger id="priority">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Milestone">Milestone</SelectItem>
-                  <SelectItem value="1">1</SelectItem>
-                  <SelectItem value="2">2</SelectItem>
-                  <SelectItem value="3">3</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="priority">Priority</Label>
+                <Select value={priority} onValueChange={(value) => setPriority(value as Priority)}>
+                  <SelectTrigger id="priority">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Milestone">Milestone</SelectItem>
+                    <SelectItem value="1">1</SelectItem>
+                    <SelectItem value="2">2</SelectItem>
+                    <SelectItem value="3">3</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="track">Track</Label>
+                <Select value={track} onValueChange={(value) => setTrack(value as Track)}>
+                  <SelectTrigger id="track">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Swiper">Swiper</SelectItem>
+                    <SelectItem value="TM">TM</SelectItem>
+                    <SelectItem value="Guardians">Guardians</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           <DialogFooter>
