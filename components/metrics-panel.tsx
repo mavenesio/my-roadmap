@@ -11,7 +11,10 @@ interface Task {
   id: string
   name: string
   priority: "Milestone" | "1" | "2" | "3"
-  track: "Swiper" | "TM" | "Guardians"
+  track: string
+  status: "TODO" | "PREWORK" | "WIP" | "TESTING" | "LAST LAP" | "DONE" | "ROLLOUT" | "DISMISSED" | "ON HOLD"
+  size: "XS" | "S" | "M" | "L" | "XL"
+  type: "DEUDA TECNICA" | "CARRY OVER" | "EXTRA MILE" | "OVNI" | "POROTO"
   weeks: string[]
   assignments: Array<{
     weekId: string
@@ -29,7 +32,7 @@ interface Week {
 interface MetricsPanelProps {
   tasks: Task[]
   weeks: Week[]
-  teamMembers: string[]
+  teamMembers: Array<{ name: string; color: string }>
   months: string[]
 }
 
@@ -38,10 +41,12 @@ export function MetricsPanel({ tasks, weeks, teamMembers, months }: MetricsPanel
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
-  const getPersonColor = (name: string): string => {
+  const getPersonColor = (name?: string | null): string => {
+    const safe = name ?? ""
+    if (safe.length === 0) return "#999999"
     let hash = 0
-    for (let i = 0; i < name.length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash)
+    for (let i = 0; i < safe.length; i++) {
+      hash = safe.charCodeAt(i) + ((hash << 5) - hash)
     }
     const hue = Math.abs(hash) % 360
     const saturation = 75 + (Math.abs(hash) % 15)
@@ -60,10 +65,10 @@ export function MetricsPanel({ tasks, weeks, teamMembers, months }: MetricsPanel
     const metrics: Record<string, Record<string, number>> = {}
     
     // Inicializar estructura
-    teamMembers.forEach(person => {
-      metrics[person] = {}
+    teamMembers.forEach(member => {
+      metrics[member.name] = {}
       months.forEach(month => {
-        metrics[person][month] = 0
+        metrics[member.name][month] = 0
       })
     })
 
@@ -75,7 +80,7 @@ export function MetricsPanel({ tasks, weeks, teamMembers, months }: MetricsPanel
         const week = monthWeeks.find(w => w.id === assignment.weekId)
         if (week) {
           assignment.assignees.forEach(assignee => {
-            if (teamMembers.includes(assignee)) {
+            if (teamMembers.some(m => m.name === assignee)) {
               metrics[assignee][week.month]++
             }
           })
@@ -94,11 +99,11 @@ export function MetricsPanel({ tasks, weeks, teamMembers, months }: MetricsPanel
   }
 
   const getTotalForMonth = (month: string) => {
-    return teamMembers.reduce((total, person) => total + metrics[person][month], 0)
+    return teamMembers.reduce((total, member) => total + metrics[member.name][month], 0)
   }
 
   const getTotalTasks = () => {
-    return teamMembers.reduce((total, person) => total + getTotalForPerson(person), 0)
+    return teamMembers.reduce((total, member) => total + getTotalForPerson(member.name), 0)
   }
 
   return (
@@ -113,8 +118,8 @@ export function MetricsPanel({ tasks, weeks, teamMembers, months }: MetricsPanel
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="text-center p-4 bg-muted/30 rounded-lg">
-              <div className="text-2xl font-bold text-primary">{getTotalTasks()}</div>
-              <div className="text-sm text-muted-foreground">Total Tareas</div>
+              <div className="text-2xl font-bold text-primary">{tasks.length}</div>
+              <div className="text-sm text-muted-foreground">Total Tasks</div>
             </div>
             <div className="text-center p-4 bg-muted/30 rounded-lg">
               <div className="text-2xl font-bold text-primary">{teamMembers.length}</div>
@@ -147,24 +152,24 @@ export function MetricsPanel({ tasks, weeks, teamMembers, months }: MetricsPanel
                 </tr>
               </thead>
               <tbody>
-                {teamMembers.map((person) => (
-                  <tr key={person} className="border-b hover:bg-muted/30">
+                {teamMembers.map((member) => (
+                  <tr key={member.name} className="border-b hover:bg-muted/30">
                     <td className="p-3 font-medium">
                       <div className="flex items-center gap-2">
                         <div
                           className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: getPersonColor(person) }}
+                          style={{ backgroundColor: member.color || getPersonColor(member.name) }}
                         />
-                        {person}
+                        {member.name}
                       </div>
                     </td>
                     {months.map((month) => {
-                      const count = metrics[person][month]
+                      const count = metrics[member.name][month]
                       return (
                         <td key={month} className="p-3 text-center">
                           {count > 0 ? (
                             <button
-                              onClick={() => handlePersonClick(person, month)}
+                              onClick={() => handlePersonClick(member.name, month)}
                               className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/80 transition-colors text-sm font-medium"
                             >
                               {count}
@@ -176,9 +181,9 @@ export function MetricsPanel({ tasks, weeks, teamMembers, months }: MetricsPanel
                       )
                     })}
                     <td className="p-3 text-center font-medium">
-                      {getTotalForPerson(person) > 0 ? (
+                      {getTotalForPerson(member.name) > 0 ? (
                         <Badge variant="secondary">
-                          {getTotalForPerson(person)}
+                          {getTotalForPerson(member.name)}
                         </Badge>
                       ) : (
                         <span className="text-muted-foreground">0</span>

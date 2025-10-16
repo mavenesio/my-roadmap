@@ -11,12 +11,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { X, Calendar, User, Clock } from "lucide-react"
+import { useRoadmapConfig } from "@/hooks/use-roadmap-config"
 
 interface Task {
   id: string
   name: string
   priority: "Milestone" | "1" | "2" | "3"
-  track: "Swiper" | "TM" | "Guardians"
+  track: string
+  status: "TODO" | "PREWORK" | "WIP" | "TESTING" | "LAST LAP" | "DONE" | "ROLLOUT" | "DISMISSED" | "ON HOLD"
+  size: "XS" | "S" | "M" | "L" | "XL"
+  type: "DEUDA TECNICA" | "CARRY OVER" | "EXTRA MILE" | "OVNI" | "POROTO"
   weeks: string[]
   assignments: Array<{
     weekId: string
@@ -41,6 +45,33 @@ interface MetricsModalProps {
 }
 
 export function MetricsModal({ open, onClose, personName, month, tasks, weeks }: MetricsModalProps) {
+  const { config } = useRoadmapConfig()
+  const colorFor = (arr: Array<{name: string; color: string}> | undefined, name: string, fallback: string) => arr?.find(i => i.name === name)?.color || fallback
+  
+  const getWeekRangeLabel = (week: { date: string }) => {
+    // week.date format: dd-mm (monday of that week)
+    const [ddStr, mmStr] = week.date.split('-')
+    const dd = parseInt(ddStr, 10)
+    const mm = parseInt(mmStr, 10)
+    if (Number.isNaN(dd) || Number.isNaN(mm)) return week.date
+    const year = config?.year ?? new Date().getFullYear()
+    const start = new Date(year, mm - 1, dd)
+    const end = new Date(start)
+    end.setDate(start.getDate() + 4) // Friday
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    const startLabel = pad(start.getDate())
+    const endLabel = pad(end.getDate())
+    const startMonth = pad(start.getMonth() + 1)
+    const endMonth = pad(end.getMonth() + 1)
+    return `${startLabel}/${startMonth} a ${endLabel}/${endMonth}`
+  }
+
+  const getWeekNumberInMonth = (weekId: string, month: string) => {
+    const monthWeeks = weeks.filter(w => w.month === month)
+    const index = monthWeeks.findIndex(w => w.id === weekId)
+    return index >= 0 ? `W${index + 1}` : weekId
+  }
+  
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "Milestone":
@@ -129,7 +160,10 @@ export function MetricsModal({ open, onClose, personName, month, tasks, weeks }:
               <div key={week.id} className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground border-b pb-2">
                   <Calendar className="h-4 w-4" />
-                  {week.date} ({week.id})
+                  <div className="flex flex-col">
+                    <span className="text-xs text-muted-foreground">{getWeekNumberInMonth(week.id, month)}</span>
+                    <span className="font-semibold text-foreground">{getWeekRangeLabel(week)}</span>
+                  </div>
                   <Badge variant="outline" className="ml-auto">
                     {weekTasks.length} tarea{weekTasks.length !== 1 ? 's' : ''}
                   </Badge>
@@ -142,10 +176,10 @@ export function MetricsModal({ open, onClose, personName, month, tasks, weeks }:
                       className="p-3 border rounded-lg bg-card hover:bg-muted/50 transition-colors"
                     >
                       <div className="flex items-start gap-2 mb-2">
-                        <Badge className={getPriorityColor(task.priority)}>
+                        <Badge className="text-white" style={{ backgroundColor: colorFor(config?.priorities, task.priority, '#6b7280') }}>
                           {task.priority}
                         </Badge>
-                        <Badge className={getTrackColor(task.track)}>
+                        <Badge className="text-white" style={{ backgroundColor: colorFor(config?.tracks, task.track, '#6b7280') }}>
                           {task.track}
                         </Badge>
                         <div className="flex-1 text-sm font-medium">

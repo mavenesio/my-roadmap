@@ -2,6 +2,15 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { useLocalStorage } from './use-local-storage'
+import {
+  DEFAULT_TRACKS,
+  DEFAULT_PRIORITIES,
+  DEFAULT_STATUSES,
+  DEFAULT_TYPES,
+  DEFAULT_SIZES,
+  DEFAULT_TEAM_MEMBERS,
+  DEFAULT_DEFAULTS,
+} from '@/config/default-roadmap-config'
 
 export interface Week {
   id: string
@@ -13,7 +22,22 @@ export interface RoadmapConfig {
   quarter: number
   year: number
   weeks: Week[]
-  teamMembers: string[]
+  teamMembers: Array<{ name: string; color: string }>
+  // Deprecated: projects is kept for backwards compatibility; prefer tracks
+  projects?: string[]
+  tracks: Array<{ name: string; color: string }>
+  priorities: Array<{ name: string; color: string }>
+  statuses: Array<{ name: string; color: string }>
+  types: Array<{ name: string; color: string }>
+  sizes: string[]
+  // Default values for dropdowns
+  defaults?: {
+    track?: string
+    priority?: string
+    status?: string
+    type?: string
+    size?: string
+  }
   createdAt: string
   lastModified: string
 }
@@ -70,13 +94,46 @@ export function useRoadmapConfig() {
   const [config, setConfig, removeConfig] = useLocalStorage<RoadmapConfig | null>('roadmap-config', null)
   const [isInitialized, setIsInitialized] = useState(false)
 
-  const initializeConfig = (quarter: number, year: number) => {
+  const generateColorFromName = (name: string): string => {
+    if (!name) return '#999999'
+    let hash = 0
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash)
+    }
+    const hue = Math.abs(hash) % 360
+    const saturation = 75 + (Math.abs(hash) % 15)
+    const lightness = 40 + (Math.abs(hash) % 20)
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`
+  }
+
+  const initializeConfig = (
+    quarter: number,
+    year: number,
+    teamMembers?: Array<{ name: string; color: string }>,
+    projects?: string[]
+  ) => {
     const weeks = generateWeeks(quarter, year)
+    
+    // If projects are provided, create tracks from them; otherwise use default tracks
+    const tracks = projects && projects.length > 0
+      ? projects.map((p, i) => ({
+          name: p,
+          color: DEFAULT_TRACKS[i % DEFAULT_TRACKS.length]?.color || generateColorFromName(p),
+        }))
+      : DEFAULT_TRACKS
+    
     const newConfig: RoadmapConfig = {
       quarter,
       year,
       weeks,
-      teamMembers: ["Sofi", "Nico", "Kai", "Ste", "Peter", "Gabo", "Chiqui", "Marian"],
+      teamMembers: teamMembers && teamMembers.length > 0 ? teamMembers : DEFAULT_TEAM_MEMBERS,
+      projects: projects && projects.length > 0 ? projects : DEFAULT_TRACKS.map(t => t.name),
+      tracks,
+      priorities: DEFAULT_PRIORITIES,
+      statuses: DEFAULT_STATUSES,
+      types: DEFAULT_TYPES,
+      sizes: DEFAULT_SIZES,
+      defaults: DEFAULT_DEFAULTS,
       createdAt: new Date().toISOString(),
       lastModified: new Date().toISOString()
     }
@@ -131,10 +188,77 @@ export function useRoadmapConfig() {
 
   // Verificar si ya hay una configuración guardada
   useEffect(() => {
-    if (config && !isInitialized) {
+    if (!config) return
+
+    let updated = false
+    const newConfig: any = { ...config }
+
+    // Migración: teamMembers de string[] a {name,color}[]
+    if (Array.isArray((config as any).teamMembers) && typeof (config as any).teamMembers[0] === 'string') {
+      newConfig.teamMembers = (config as any).teamMembers.map((name: string) => ({ name, color: generateColorFromName(name) }))
+      updated = true
+    }
+
+    // Migración: proyectos por defecto si faltan
+    if (!Array.isArray((config as any).projects)) {
+      newConfig.projects = ["Swiper", "TM", "Guardians"]
+      updated = true
+    }
+
+    // Migración: tracks a partir de projects o crear por defecto
+    if (!Array.isArray((config as any).tracks)) {
+      const base = (config as any).projects || ["Swiper", "TM", "Guardians"]
+      newConfig.tracks = base.map((p: string, i: number) => ({ name: p, color: ["#3b82f6", "#10b981", "#8b5cf6"][i % 3] }))
+      updated = true
+    }
+
+    // Migración: prioridades/estados/tipos/sizes por defecto si faltan
+    if (!Array.isArray((config as any).priorities)) {
+      newConfig.priorities = [
+        { name: "Milestone", color: "#f59e0b" },
+        { name: "1", color: "#ef4444" },
+        { name: "2", color: "#3b82f6" },
+        { name: "3", color: "#10b981" },
+      ]
+      updated = true
+    }
+    if (!Array.isArray((config as any).statuses)) {
+      newConfig.statuses = [
+        { name: "TODO", color: "#9ca3af" },
+        { name: "PREWORK", color: "#64748b" },
+        { name: "WIP", color: "#3b82f6" },
+        { name: "TESTING", color: "#a855f7" },
+        { name: "LAST LAP", color: "#f59e0b" },
+        { name: "DONE", color: "#10b981" },
+        { name: "ROLLOUT", color: "#22d3ee" },
+        { name: "DISMISSED", color: "#ef4444" },
+        { name: "ON HOLD", color: "#6b7280" },
+      ]
+      updated = true
+    }
+    if (!Array.isArray((config as any).types)) {
+      newConfig.types = [
+        { name: "DEUDA TECNICA", color: "#ef4444" },
+        { name: "CARRY OVER", color: "#f59e0b" },
+        { name: "EXTRA MILE", color: "#22d3ee" },
+        { name: "OVNI", color: "#a855f7" },
+        { name: "POROTO", color: "#9ca3af" },
+      ]
+      updated = true
+    }
+    if (!Array.isArray((config as any).sizes)) {
+      newConfig.sizes = ["XS", "S", "M", "L", "XL"]
+      updated = true
+    }
+
+    if (updated) {
+      setConfig(newConfig)
+    }
+
+    if (!isInitialized) {
       setIsInitialized(true)
     }
-  }, [config, isInitialized])
+  }, [config, isInitialized, setConfig])
 
   const months = useMemo(() => {
     if (!config) return []
