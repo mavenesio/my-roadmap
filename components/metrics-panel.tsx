@@ -106,6 +106,32 @@ export function MetricsPanel({ tasks, weeks, teamMembers, months }: MetricsPanel
     return teamMembers.reduce((total, member) => total + getTotalForPerson(member.name), 0)
   }
 
+  // Función para obtener el color del semáforo basado en la cantidad de tareas
+  const getSemaphoreColor = (count: number): { bg: string; hover: string; text: string } => {
+    if (count >= 4 && count <= 6) {
+      // Verde: 4-6 tareas (ideal)
+      return {
+        bg: 'bg-green-600',
+        hover: 'hover:bg-green-700',
+        text: 'text-white'
+      }
+    } else if (count === 3 || count === 7) {
+      // Amarillo: 3 o 7 tareas (advertencia)
+      return {
+        bg: 'bg-yellow-500',
+        hover: 'hover:bg-yellow-600',
+        text: 'text-black'
+      }
+    } else {
+      // Rojo: 1, 2, 8 o más (sobrecarga o subcarga)
+      return {
+        bg: 'bg-red-600',
+        hover: 'hover:bg-red-700',
+        text: 'text-white'
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -165,12 +191,13 @@ export function MetricsPanel({ tasks, weeks, teamMembers, months }: MetricsPanel
                     </td>
                     {months.map((month) => {
                       const count = metrics[member.name][month]
+                      const colors = getSemaphoreColor(count)
                       return (
                         <td key={month} className="p-3 text-center">
                           {count > 0 ? (
                             <button
                               onClick={() => handlePersonClick(member.name, month)}
-                              className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/80 transition-colors text-sm font-medium"
+                              className={`inline-flex items-center justify-center w-8 h-8 rounded-full ${colors.bg} ${colors.text} ${colors.hover} transition-colors text-sm font-medium`}
                             >
                               {count}
                             </button>

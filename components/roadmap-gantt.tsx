@@ -13,12 +13,13 @@ import { QuarterYearModal } from "@/components/quarter-year-modal"
 import { MetricsPanel } from "@/components/metrics-panel"
 import { useRoadmapConfig } from "@/hooks/use-roadmap-config"
 import { useLocalStorage } from "@/hooks/use-local-storage"
-import { Download, Upload, X, ChevronDown, ChevronRight, GripVertical, Pin, PinOff, MessageSquare } from "lucide-react"
+import { Download, Upload, X, ChevronDown, ChevronRight, GripVertical, Pin, PinOff, MessageSquare, Edit2, Users } from "lucide-react"
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, DragEndEvent } from "@dnd-kit/core"
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 type Priority = "Milestone" | "1" | "2" | "3"
 type Track = string
@@ -463,6 +464,24 @@ export function RoadmapGantt() {
     return `${startLabel}/${startMonth} a ${endLabel}/${endMonth}`
   }
 
+  // Función para determinar si una semana es la semana actual
+  const isCurrentWeek = (week: { date: string }) => {
+    const [ddStr, mmStr] = week.date.split('-')
+    const dd = parseInt(ddStr, 10)
+    const mm = parseInt(mmStr, 10)
+    if (Number.isNaN(dd) || Number.isNaN(mm)) return false
+    
+    const year = config?.year ?? new Date().getFullYear()
+    const weekStart = new Date(year, mm - 1, dd) // Lunes
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekStart.getDate() + 6) // Domingo (lunes + 6 días)
+    
+    const today = new Date()
+    today.setHours(0, 0, 0, 0) // Normalizar a medianoche para comparación
+    
+    return today >= weekStart && today <= weekEnd
+  }
+
   // Summary helpers for footer
   const getAssigneeCountsForWeek = (weekId: string) => {
     const counts = new Map<string, number>()
@@ -559,33 +578,43 @@ export function RoadmapGantt() {
         style={{ gridTemplateColumns: getGridColumns(), ...style }}
         className="grid border-b border-border hover:bg-muted/30"
       >
-        <div
-          className="border-r border-border p-4 cursor-pointer"
-          onDoubleClick={() => {
-            setEditingTask(task)
-            setIsEditOpen(true)
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <button aria-label="Drag row" className="cursor-grab text-muted-foreground hover:text-foreground" {...listeners} {...attributes}>
-              <GripVertical className="h-4 w-4" />
-            </button>
-            <div className="text-sm leading-relaxed font-medium">{task.name}</div>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Badge className="text-white hover:opacity-90" style={{ backgroundColor: getPriorityColor(task.priority) }}>{task.priority}</Badge>
-            <Badge className="text-white hover:opacity-90" style={{ backgroundColor: getTrackColor(task.track) }}>{task.track}</Badge>
-            <Badge className="text-white text-[10px] px-2 py-1 h-6 hover:opacity-90" style={{ backgroundColor: getStatusColor(task.status) }}>{task.status ?? "TODO"}</Badge>
-            <Badge variant="secondary" className="text-[10px] px-2 py-1 h-6">{task.size ?? "S"}</Badge>
-            <Badge className="text-white text-[10px] px-2 py-1 h-6 hover:opacity-90" style={{ backgroundColor: getTypeColor(task.type) }}>{task.type ?? "POROTO"}</Badge>
-            {task.comments && task.comments.length > 0 && (
-              <Badge variant="secondary" className="text-[10px] px-2 py-1 h-6 flex items-center gap-1">
-                <MessageSquare className="h-3 w-3" />
-                {task.comments.length}
-              </Badge>
-            )}
-          </div>
-        </div>
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                className="border-r border-border p-4 cursor-pointer hover:bg-muted/50 transition-colors group"
+                onDoubleClick={() => {
+                  setEditingTask(task)
+                  setIsEditOpen(true)
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <button aria-label="Drag row" className="cursor-grab text-muted-foreground hover:text-foreground" {...listeners} {...attributes}>
+                    <GripVertical className="h-4 w-4" />
+                  </button>
+                  <div className="text-sm leading-relaxed font-medium flex-1">{task.name}</div>
+                  <Edit2 className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge className="text-white hover:opacity-90" style={{ backgroundColor: getPriorityColor(task.priority) }}>{task.priority}</Badge>
+                  <Badge className="text-white hover:opacity-90" style={{ backgroundColor: getTrackColor(task.track) }}>{task.track}</Badge>
+                  <Badge className="text-white text-[10px] px-2 py-1 h-6 hover:opacity-90" style={{ backgroundColor: getStatusColor(task.status) }}>{task.status ?? "TODO"}</Badge>
+                  <Badge variant="secondary" className="text-[10px] px-2 py-1 h-6">{task.size ?? "S"}</Badge>
+                  <Badge className="text-white text-[10px] px-2 py-1 h-6 hover:opacity-90" style={{ backgroundColor: getTypeColor(task.type) }}>{task.type ?? "POROTO"}</Badge>
+                  {task.comments && task.comments.length > 0 && (
+                    <Badge variant="secondary" className="text-[10px] px-2 py-1 h-6 flex items-center gap-1">
+                      <MessageSquare className="h-3 w-3" />
+                      {task.comments.length}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              <p>Doble clic para editar</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         {months.map((month) => {
                 const isCollapsed = collapsedMonths.has(month)
                 const monthColor = MONTH_COLORS[month as keyof typeof MONTH_COLORS]
@@ -619,12 +648,19 @@ export function RoadmapGantt() {
                   const canAddMore = assignees.length < 2
                   const hasAssignees = assignees.length > 0
                   const cellKey = `${task.id}-${week.id}`
+                  const isCurrent = isCurrentWeek(week)
 
                   return (
                     <div 
                       key={week.id} 
-                      className={`relative flex flex-col items-center justify-center gap-1 border-r border-border p-1 min-h-[60px] ${
-                        hasAssignees ? 'bg-blue-100/60' : monthColor
+                      className={`relative flex flex-col items-center justify-center gap-1 border-r p-1 min-h-[60px] ${
+                        isCurrent 
+                          ? 'border-l-4 border-l-blue-600 bg-blue-50/40 dark:bg-blue-950/20' 
+                          : 'border-border'
+                      } ${
+                        hasAssignees && !isCurrent ? 'bg-blue-100/60' : ''
+                      } ${
+                        !hasAssignees && !isCurrent ? monthColor : ''
                       }`}
                       onMouseDown={(e) => {
                         // Solo abrir dropdown si es click izquierdo y no hay dropdown abierto
@@ -745,6 +781,12 @@ export function RoadmapGantt() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Link href="/team">
+            <Button variant="outline" className="gap-2 bg-transparent">
+              <Users className="h-4 w-4" />
+              Mi Equipo
+            </Button>
+          </Link>
           <Link href="/settings">
             <Button variant="outline" className="gap-2 bg-transparent">
               Configuración
@@ -889,12 +931,27 @@ export function RoadmapGantt() {
                 }
 
                 const monthWeeks = getMonthWeeks(month)
-                return monthWeeks.map((week, idx) => (
-                  <div key={week.id} className={`border-r border-border p-2 text-center text-xs ${monthColor}`}>
-                    <div className="text-muted-foreground">{`W${idx + 1}`}</div>
-                    <div className="font-medium">{getWeekRangeLabel(week)}</div>
-                  </div>
-                ))
+                return monthWeeks.map((week, idx) => {
+                  const isCurrent = isCurrentWeek(week)
+                  return (
+                    <div 
+                      key={week.id} 
+                      className={`border-r p-2 text-center text-xs ${monthColor} ${
+                        isCurrent 
+                          ? 'border-l-4 border-l-blue-600 bg-blue-50/60 dark:bg-blue-950/30' 
+                          : 'border-border'
+                      }`}
+                    >
+                      <div className={`${isCurrent ? 'text-blue-700 dark:text-blue-400 font-semibold' : 'text-muted-foreground'}`}>
+                        {`W${idx + 1}`}
+                        {isCurrent && ' 📍'}
+                      </div>
+                      <div className={`font-medium ${isCurrent ? 'text-blue-900 dark:text-blue-300' : ''}`}>
+                        {getWeekRangeLabel(week)}
+                      </div>
+                    </div>
+                  )
+                })
               })}
             </div>
           </div>
@@ -947,8 +1004,16 @@ export function RoadmapGantt() {
               const monthWeeks = getMonthWeeks(month)
               return monthWeeks.map((week) => {
                 const counts = getAssigneeCountsForWeek(week.id)
+                const isCurrent = isCurrentWeek(week)
                 return (
-                  <div key={week.id} className={`border-r border-border p-2 text-[11px] ${monthColor}`}>
+                  <div 
+                    key={week.id} 
+                    className={`border-r p-2 text-[11px] ${monthColor} ${
+                      isCurrent 
+                        ? 'border-l-4 border-l-blue-600 bg-blue-50/60 dark:bg-blue-950/30' 
+                        : 'border-border'
+                    }`}
+                  >
                     {counts.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
                         {counts.map(({ name, count }) => (

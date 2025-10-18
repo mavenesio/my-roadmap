@@ -4,18 +4,19 @@ import type React from "react"
 import { useEffect, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RoadmapConfig } from "@/hooks/use-roadmap-config"
-import { Edit3, Save, MessageSquare, Trash2, Pencil, Check, X, Info } from "lucide-react"
+import { Edit3, Save, MessageSquare, Trash2, Pencil, Check, X, Info, Clock } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
@@ -63,9 +64,10 @@ interface EditTaskModalProps {
     comments?: Comment[]
   }) => void
   config: RoadmapConfig
+  direction?: "left" | "right"
 }
 
-export function EditTaskModal({ open, onClose, task, onSave, config }: EditTaskModalProps) {
+export function EditTaskModal({ open, onClose, task, onSave, config, direction = "left" }: EditTaskModalProps) {
   const [name, setName] = useState(task.name)
   const [priority, setPriority] = useState<Priority>(task.priority)
   const [track, setTrack] = useState<Track>(task.track)
@@ -155,24 +157,29 @@ export function EditTaskModal({ open, onClose, task, onSave, config }: EditTaskM
   }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader className="space-y-3 pb-4 border-b">
-            <div className="flex items-center gap-2">
-              <div className="rounded-lg bg-primary/10 p-2">
+    <Drawer open={open} onOpenChange={onClose} direction={direction}>
+      <DrawerContent>
+        <form onSubmit={handleSubmit} className="flex flex-col h-full">
+          <DrawerHeader className="space-y-3 pb-4 border-b px-6 pt-6">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-primary/10 p-2 flex-shrink-0">
                 <Edit3 className="h-5 w-5 text-primary" />
               </div>
-              <div>
-                <DialogTitle className="text-2xl">Edit Task</DialogTitle>
-                <DialogDescription className="text-base mt-1">
+              <div className="flex-1 min-w-0">
+                <DrawerTitle className="text-2xl">Edit Task</DrawerTitle>
+                <DrawerDescription className="text-base mt-1">
                   Update task details and properties
-                </DialogDescription>
+                </DrawerDescription>
               </div>
+              <DrawerClose asChild>
+                <Button variant="ghost" size="icon" className="rounded-full flex-shrink-0">
+                  <X className="h-4 w-4" />
+                </Button>
+              </DrawerClose>
             </div>
-          </DialogHeader>
+          </DrawerHeader>
 
-          <div className="space-y-6 py-6">
+          <div className="flex-1 overflow-y-auto px-6 space-y-6 py-6">
             {/* Task Name */}
             <div className="space-y-2">
               <Label htmlFor="name" className="text-base font-semibold">
@@ -298,8 +305,8 @@ export function EditTaskModal({ open, onClose, task, onSave, config }: EditTaskM
           </div>
 
           {/* Comments Section */}
-          <div className="space-y-3 pt-6 border-t">
-            <div className="flex items-center justify-between mb-4">
+          <div className="border-t flex flex-col min-h-0 flex-1">
+            <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/30">
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-5 w-5 text-primary" />
                 <Label className="text-base font-semibold">
@@ -318,149 +325,168 @@ export function EditTaskModal({ open, onClose, task, onSave, config }: EditTaskM
               </Button>
             </div>
 
-            {/* Markdown Help */}
-            {showMarkdownHelp && (
-              <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-2 border border-border">
-                <div className="font-semibold text-sm mb-2">Formato Markdown disponible:</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div><code className="bg-background px-1.5 py-0.5 rounded">**negrita**</code> → <strong>negrita</strong></div>
-                  <div><code className="bg-background px-1.5 py-0.5 rounded">*cursiva*</code> → <em>cursiva</em></div>
-                  <div><code className="bg-background px-1.5 py-0.5 rounded">~~tachado~~</code> → <del>tachado</del></div>
-                  <div><code className="bg-background px-1.5 py-0.5 rounded">`código`</code> → <code>código</code></div>
-                  <div><code className="bg-background px-1.5 py-0.5 rounded">- lista</code> → lista con viñetas</div>
-                  <div><code className="bg-background px-1.5 py-0.5 rounded">[link](url)</code> → enlace</div>
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+              {/* Markdown Help */}
+              {showMarkdownHelp && (
+                <div className="bg-muted/50 rounded-lg p-4 text-xs space-y-2 border border-border">
+                  <div className="font-semibold text-sm mb-2">Formato Markdown disponible:</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><code className="bg-background px-1.5 py-0.5 rounded">**negrita**</code> → <strong>negrita</strong></div>
+                    <div><code className="bg-background px-1.5 py-0.5 rounded">*cursiva*</code> → <em>cursiva</em></div>
+                    <div><code className="bg-background px-1.5 py-0.5 rounded">~~tachado~~</code> → <del>tachado</del></div>
+                    <div><code className="bg-background px-1.5 py-0.5 rounded">`código`</code> → <code>código</code></div>
+                    <div><code className="bg-background px-1.5 py-0.5 rounded">- lista</code> → lista con viñetas</div>
+                    <div><code className="bg-background px-1.5 py-0.5 rounded">[link](url)</code> → enlace</div>
+                  </div>
+                  <div className="text-muted-foreground pt-1 border-t">
+                    Presiona <kbd className="px-1.5 py-0.5 bg-background border rounded text-xs">Ctrl+Enter</kbd> o <kbd className="px-1.5 py-0.5 bg-background border rounded text-xs">⌘+Enter</kbd> para enviar
+                  </div>
                 </div>
-                <div className="text-muted-foreground pt-1 border-t">
-                  Presiona <kbd className="px-1.5 py-0.5 bg-background border rounded text-xs">Ctrl+Enter</kbd> o <kbd className="px-1.5 py-0.5 bg-background border rounded text-xs">⌘+Enter</kbd> para enviar
+              )}
+
+              {/* Input for new comment */}
+              <div className="space-y-3">
+                <Textarea
+                  ref={textareaRef}
+                  placeholder="Escribe un comentario... (soporta Markdown)"
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  className="min-h-[90px] text-sm resize-none focus-visible:ring-2"
+                />
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground">
+                    Ctrl/⌘ + Enter para enviar
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleAddComment}
+                    disabled={!newComment.trim()}
+                    className="h-9 px-4"
+                  >
+                    Agregar Comentario
+                  </Button>
                 </div>
               </div>
-            )}
 
-            {/* Input for new comment */}
-            <div className="space-y-2">
-              <Textarea
-                ref={textareaRef}
-                placeholder="Escribe un comentario... (soporta Markdown)"
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                onKeyDown={handleKeyPress}
-                className="min-h-[80px] text-sm resize-none focus-visible:ring-2"
-              />
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-muted-foreground">
-                  Ctrl/⌘ + Enter para enviar
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={handleAddComment}
-                  disabled={!newComment.trim()}
-                  className="h-8"
-                >
-                  Agregar Comentario
-                </Button>
-              </div>
-            </div>
-
-            {/* Comments list */}
-            {comments.length > 0 && (
-              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
-                {comments.map((comment) => (
-                  <div key={comment.id} className="group relative">
-                    {editingCommentId === comment.id ? (
-                      <div className="bg-muted/50 rounded-2xl p-4 border border-border">
-                        <Textarea
-                          value={editingCommentText}
-                          onChange={(e) => setEditingCommentText(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                              e.preventDefault()
-                              handleSaveEditComment(comment.id)
-                            } else if (e.key === "Escape") {
-                              handleCancelEdit()
-                            }
-                          }}
-                          className="w-full min-h-[60px] text-sm mb-2 resize-none"
-                          autoFocus
-                        />
-                        <div className="flex gap-2 justify-end">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={handleCancelEdit}
-                            className="h-7 px-2"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => handleSaveEditComment(comment.id)}
-                            className="h-7 px-2"
-                          >
-                            <Check className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="bg-primary/10 rounded-2xl rounded-tl-sm p-4 border border-primary/20">
-                        <div className="text-sm text-foreground leading-relaxed break-words markdown-content">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {comment.text}
-                          </ReactMarkdown>
-                        </div>
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-xs text-muted-foreground">
-                            {formatDate(comment.createdAt)}
-                          </span>
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {/* Comments list */}
+              {comments.length > 0 && (
+                <div className="space-y-5">
+                {comments.map((comment, index) => {
+                  // Alternar colores para darle variedad visual
+                  const colorSchemes = [
+                    { bg: 'bg-gradient-to-br from-purple-50/80 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20', border: 'border-purple-200/60 dark:border-purple-800/40' },
+                    { bg: 'bg-gradient-to-br from-emerald-50/80 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20', border: 'border-emerald-200/60 dark:border-emerald-800/40' },
+                    { bg: 'bg-gradient-to-br from-orange-50/80 to-orange-100/50 dark:from-orange-950/30 dark:to-orange-900/20', border: 'border-orange-200/60 dark:border-orange-800/40' },
+                  ]
+                  const colorScheme = colorSchemes[index % colorSchemes.length]
+                  
+                  return (
+                    <div key={comment.id} className="group relative">
+                      {editingCommentId === comment.id ? (
+                        <div className="bg-gradient-to-br from-muted/80 to-muted/40 rounded-2xl p-4 border-2 border-border shadow-sm">
+                          <Textarea
+                            value={editingCommentText}
+                            onChange={(e) => setEditingCommentText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                                e.preventDefault()
+                                handleSaveEditComment(comment.id)
+                              } else if (e.key === "Escape") {
+                                handleCancelEdit()
+                              }
+                            }}
+                            className="w-full min-h-[60px] text-sm mb-2 resize-none bg-background/50 backdrop-blur-sm"
+                            autoFocus
+                          />
+                          <div className="flex gap-2 justify-end">
                             <Button
                               type="button"
                               size="sm"
                               variant="ghost"
-                              onClick={() => handleEditComment(comment.id, comment.text)}
-                              className="h-6 w-6 p-0 hover:bg-primary/20"
+                              onClick={handleCancelEdit}
+                              className="h-7 px-3 hover:bg-background/80"
                             >
-                              <Pencil className="h-3 w-3" />
+                              <X className="h-3 w-3 mr-1" />
+                              Cancelar
                             </Button>
                             <Button
                               type="button"
                               size="sm"
-                              variant="ghost"
-                              onClick={() => handleDeleteComment(comment.id)}
-                              className="h-6 w-6 p-0 hover:bg-destructive/20 hover:text-destructive"
+                              onClick={() => handleSaveEditComment(comment.id)}
+                              className="h-7 px-3 bg-primary hover:bg-primary/90"
                             >
-                              <Trash2 className="h-3 w-3" />
+                              <Check className="h-3 w-3 mr-1" />
+                              Guardar
                             </Button>
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+                      ) : (
+                        <div className={`${colorScheme.bg} rounded-2xl rounded-tl-md p-5 border-2 ${colorScheme.border} shadow-sm hover:shadow-md transition-all duration-200`}>
+                          <div className="text-sm text-foreground leading-relaxed break-words markdown-content">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {comment.text}
+                            </ReactMarkdown>
+                          </div>
+                          <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/30">
+                            <span className="text-xs font-medium text-muted-foreground/80 flex items-center gap-1.5">
+                              <Clock className="h-3 w-3" />
+                              {formatDate(comment.createdAt)}
+                            </span>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleEditComment(comment.id, comment.text)}
+                                className="h-7 w-7 p-0 hover:bg-background/60 rounded-lg"
+                                title="Editar comentario"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDeleteComment(comment.id)}
+                                className="h-7 w-7 p-0 hover:bg-destructive/20 hover:text-destructive rounded-lg"
+                                title="Eliminar comentario"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                </div>
+              )}
 
-            {comments.length === 0 && (
-              <div className="text-center py-8 text-sm text-muted-foreground">
-                No hay comentarios aún. ¡Sé el primero en comentar!
-              </div>
-            )}
+              {comments.length === 0 && (
+                <div className="text-center py-12 text-sm text-muted-foreground">
+                  No hay comentarios aún. ¡Sé el primero en comentar!
+                </div>
+              )}
+            </div>
           </div>
 
-          <DialogFooter className="gap-3 pt-4 border-t">
-            <Button type="button" variant="outline" onClick={onClose} className="h-10 px-6">
-              Cancel
-            </Button>
-            <Button type="submit" className="h-10 px-8 gap-2">
+          <DrawerFooter className="gap-3 pt-4 border-t flex-row px-6 pb-6">
+            <DrawerClose asChild>
+              <Button type="button" variant="outline" className="flex-1 h-11">
+                Cancel
+              </Button>
+            </DrawerClose>
+            <Button type="submit" className="flex-1 h-11 gap-2">
               <Save className="h-4 w-4" />
               Save Changes
             </Button>
-          </DialogFooter>
+          </DrawerFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </DrawerContent>
+    </Drawer>
   )
 }
 

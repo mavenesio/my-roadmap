@@ -18,11 +18,49 @@ export interface Week {
   month: string
 }
 
+export type AbsenceType = 'vacation' | 'license'
+
+export interface Vacation {
+  id: string
+  startDate: string // ISO date format
+  endDate: string // ISO date format
+  description?: string
+  type?: AbsenceType // 'vacation' o 'license'
+}
+
+export interface Comment {
+  id: string
+  text: string
+  createdAt: number
+}
+
+export type GoalRating = "Below" | "Meet" | "Above"
+
+export interface Goal {
+  id: string
+  description: string
+  rating?: GoalRating // Opcional
+  extraMiles: string
+  track: string
+  completed: boolean
+  createdAt: number
+}
+
+export interface TeamMember {
+  name: string
+  color: string
+  nationality?: string
+  seniority?: string
+  vacations?: Vacation[]
+  comments?: Comment[]
+  goals?: Goal[]
+}
+
 export interface RoadmapConfig {
   quarter: number
   year: number
   weeks: Week[]
-  teamMembers: Array<{ name: string; color: string }>
+  teamMembers: TeamMember[]
   // Deprecated: projects is kept for backwards compatibility; prefer tracks
   projects?: string[]
   tracks: Array<{ name: string; color: string }>
@@ -109,7 +147,7 @@ export function useRoadmapConfig() {
   const initializeConfig = (
     quarter: number,
     year: number,
-    teamMembers?: Array<{ name: string; color: string }>,
+    teamMembers?: TeamMember[],
     projects?: string[]
   ) => {
     const weeks = generateWeeks(quarter, year)

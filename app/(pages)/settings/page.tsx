@@ -18,7 +18,6 @@ export default function SettingsPage() {
   const [statuses, setStatuses] = useState(config?.statuses || [])
   const [types, setTypes] = useState(config?.types || [])
   const [sizes, setSizes] = useState(config?.sizes || [])
-  const [members, setMembers] = useState(config?.teamMembers || [])
   const [defaults, setDefaults] = useState(config?.defaults || {
     track: config?.tracks[0]?.name || "",
     priority: config?.priorities[0]?.name || "",
@@ -39,8 +38,7 @@ export default function SettingsPage() {
       priorities, 
       statuses, 
       types, 
-      sizes, 
-      teamMembers: members,
+      sizes,
       defaults
     })
     
@@ -131,15 +129,6 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent>
             <SettingsRow items={sizes as any} setItems={setSizes as any} placeholder="Size" withColor={false} />
-          </CardContent>
-        </Card>
-
-        <Card className="md:col-span-1">
-          <CardHeader>
-            <CardTitle>Team</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SettingsRow items={members} setItems={setMembers} placeholder="Nombre" />
           </CardContent>
         </Card>
 
