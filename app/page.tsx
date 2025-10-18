@@ -1,4 +1,4 @@
-"use client"
+import React from "react"
 import { RoadmapGantt } from "@/components/roadmap-gantt"
 
 export default function RoadmapPage() {
@@ -10,7 +10,10 @@ export default function RoadmapPage() {
           <p className="mt-2 text-muted-foreground">Gantt chart of the team's weekly tasks for the selected quarter.</p>
         </div>
 
-        <RoadmapGantt />
+        <React.Suspense fallback={<div className="py-10 text-center text-muted-foreground">Cargando roadmap...</div>}>
+          {/* RoadmapGantt is a client component and uses next/navigation hooks; it must be rendered inside a Suspense boundary to avoid CSR bailout during prerender. */}
+          <RoadmapGantt />
+        </React.Suspense>
       </div>
     </div>
   )
