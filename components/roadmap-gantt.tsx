@@ -123,13 +123,14 @@ export function RoadmapGantt() {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isStickyFooter, setIsStickyFooter] = useState(true)
   const [isTodoDrawerOpen, setIsTodoDrawerOpen] = useState(false)
-  const [globalTodos] = useLocalStorage<any[]>('global-todo-list', [])
+  const [todoLists] = useLocalStorage<any[]>('todo-lists', [])
+  const [todos] = useLocalStorage<any[]>('todos', [])
   const router = useRouter()
   const searchParams = useSearchParams()
   const [filtersInitialized, setFiltersInitialized] = useState(false)
 
   // Calcular contador de TODOs pendientes
-  const pendingTodosCount = globalTodos.filter(t => t.status !== "DONE").length
+  const pendingTodosCount = todos.filter((t: any) => t.status !== "DONE").length
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -261,7 +262,8 @@ export function RoadmapGantt() {
     const exportData = {
       config,
       tasks,
-      todos: globalTodos,
+      todoLists,
+      todos,
       exportedAt: new Date().toISOString(),
       version: "1.0.0"
     }
@@ -304,10 +306,21 @@ export function RoadmapGantt() {
             setTasks(importedData)
           }
 
+          // Importar TODO Lists
+          if (importedData.todoLists) {
+            localStorage.setItem('todo-lists', JSON.stringify(importedData.todoLists))
+          }
+          
           // Importar TODOs
           if (importedData.todos) {
-            localStorage.setItem('global-todo-list', JSON.stringify(importedData.todos))
+            localStorage.setItem('todos', JSON.stringify(importedData.todos))
           }
+          
+          // Limpiar clave obsoleta si existe
+          localStorage.removeItem('global-todo-list')
+          
+          // Recargar para reflejar cambios
+          window.location.reload()
           
         } catch (error) {
           console.error("Error importing file:", error)
@@ -344,12 +357,23 @@ export function RoadmapGantt() {
           setTasks(importedData)
         }
 
-        // Importar TODOs
-        if (importedData.todos) {
-          localStorage.setItem('global-todo-list', JSON.stringify(importedData.todos))
+        // Importar TODO Lists
+        if (importedData.todoLists) {
+          localStorage.setItem('todo-lists', JSON.stringify(importedData.todoLists))
         }
         
+        // Importar TODOs
+        if (importedData.todos) {
+          localStorage.setItem('todos', JSON.stringify(importedData.todos))
+        }
+        
+        // Limpiar clave obsoleta si existe
+        localStorage.removeItem('global-todo-list')
+        
         setShowQuarterModal(false)
+        
+        // Recargar para reflejar cambios
+        window.location.reload()
         
       } catch (error) {
         console.error("Error importing file:", error)
@@ -484,8 +508,12 @@ export function RoadmapGantt() {
     let absenceType: 'vacation' | 'license' | null = null
 
     member.vacations.forEach(vacation => {
-      const vacationStart = new Date(vacation.startDate)
-      const vacationEnd = new Date(vacation.endDate)
+      // Parsear fechas en zona horaria local para evitar problemas de UTC
+      const [startYear, startMonth, startDay] = vacation.startDate.split('-').map(Number)
+      const [endYear, endMonth, endDay] = vacation.endDate.split('-').map(Number)
+      
+      const vacationStart = new Date(startYear, startMonth - 1, startDay)
+      const vacationEnd = new Date(endYear, endMonth - 1, endDay)
 
       // Normalizar a medianoche para comparación
       vacationStart.setHours(0, 0, 0, 0)
@@ -906,7 +934,9 @@ export function RoadmapGantt() {
                 setTasks([])
                 localStorage.removeItem('roadmap-config')
                 localStorage.removeItem('roadmap-tasks')
-                localStorage.removeItem('global-todo-list')
+                localStorage.removeItem('todo-lists')
+                localStorage.removeItem('todos')
+                localStorage.removeItem('global-todo-list') // Limpiar clave obsoleta también
                 window.location.reload()
               }
             }}

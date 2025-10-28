@@ -5,7 +5,6 @@ import { useEffect, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Drawer,
-  DrawerClose,
   DrawerContent,
   DrawerDescription,
   DrawerFooter,
@@ -215,7 +214,7 @@ export function EditTeamMemberDrawer({
   if (!member) return null
 
   return (
-    <Drawer open={open} onOpenChange={onClose} direction={direction} dismissible={true} modal={true}>
+    <Drawer open={open} onOpenChange={onClose} direction={direction} dismissible={false} modal={true}>
       <DrawerContent
         className={`${
           direction === "left" ? "left-0" : "right-0"
@@ -478,11 +477,14 @@ export function EditTeamMemberDrawer({
                 <Save className="h-4 w-4" />
                 Guardar Cambios
               </Button>
-              <DrawerClose asChild>
-                <Button type="button" variant="outline" className="flex-1 h-11 text-base">
-                  Cancelar
-                </Button>
-              </DrawerClose>
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="flex-1 h-11 text-base"
+                onClick={onClose}
+              >
+                Cancelar
+              </Button>
             </div>
           </DrawerFooter>
         </form>

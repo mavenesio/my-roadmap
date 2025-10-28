@@ -85,16 +85,22 @@ export function VacationsTimeline({ members, onUpdateMember }: VacationsTimeline
 
   const isDateInVacation = (date: Date, vacations: Vacation[] = []) => {
     return vacations.some(vacation => {
-      const start = new Date(vacation.startDate)
-      const end = new Date(vacation.endDate)
+      // Parsear fechas en zona horaria local
+      const [startYear, startMonth, startDay] = vacation.startDate.split('-').map(Number)
+      const [endYear, endMonth, endDay] = vacation.endDate.split('-').map(Number)
+      const start = new Date(startYear, startMonth - 1, startDay)
+      const end = new Date(endYear, endMonth - 1, endDay)
       return date >= start && date <= end
     })
   }
 
   const getVacationForDate = (date: Date, vacations: Vacation[] = []) => {
     return vacations.find(vacation => {
-      const start = new Date(vacation.startDate)
-      const end = new Date(vacation.endDate)
+      // Parsear fechas en zona horaria local
+      const [startYear, startMonth, startDay] = vacation.startDate.split('-').map(Number)
+      const [endYear, endMonth, endDay] = vacation.endDate.split('-').map(Number)
+      const start = new Date(startYear, startMonth - 1, startDay)
+      const end = new Date(endYear, endMonth - 1, endDay)
       return date >= start && date <= end
     })
   }
@@ -109,6 +115,12 @@ export function VacationsTimeline({ members, onUpdateMember }: VacationsTimeline
 
   const goToToday = () => {
     setCurrentMonth(new Date())
+  }
+
+  // Helper para parsear fecha en zona horaria local
+  const parseDateLocal = (dateStr: string) => {
+    const [year, month, day] = dateStr.split('-').map(Number)
+    return new Date(year, month - 1, day)
   }
 
   return (
@@ -244,8 +256,8 @@ export function VacationsTimeline({ members, onUpdateMember }: VacationsTimeline
                       const isPrevDaySameVacation = prevDayVacation?.id === vacation?.id
                       const isToday = day.toDateString() === new Date().toDateString()
                       const isWeekend = day.getDay() === 0 || day.getDay() === 6
-                      const isFirstDay = vacation && day.toDateString() === new Date(vacation.startDate).toDateString()
-                      const isLastDay = vacation && day.toDateString() === new Date(vacation.endDate).toDateString()
+                      const isFirstDay = vacation && day.toDateString() === parseDateLocal(vacation.startDate).toDateString()
+                      const isLastDay = vacation && day.toDateString() === parseDateLocal(vacation.endDate).toDateString()
                       
                       return (
                         <td 

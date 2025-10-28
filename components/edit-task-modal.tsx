@@ -5,7 +5,6 @@ import { useEffect, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Drawer,
-  DrawerClose,
   DrawerContent,
   DrawerDescription,
   DrawerFooter,
@@ -157,7 +156,7 @@ export function EditTaskModal({ open, onClose, task, onSave, config, direction =
   }
 
   return (
-    <Drawer open={open} onOpenChange={onClose} direction={direction} dismissible={true} modal={true}>
+    <Drawer open={open} onOpenChange={onClose} direction={direction} dismissible={false} modal={true}>
       <DrawerContent>
         <form onSubmit={handleSubmit} className="flex flex-col h-full">
           <DrawerHeader className="space-y-3 pb-4 border-b px-6 pt-6">
@@ -171,11 +170,15 @@ export function EditTaskModal({ open, onClose, task, onSave, config, direction =
                   Update task details and properties
                 </DrawerDescription>
               </div>
-              <DrawerClose asChild>
-                <Button variant="ghost" size="icon" className="rounded-full flex-shrink-0">
-                  <X className="h-4 w-4" />
-                </Button>
-              </DrawerClose>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="rounded-full flex-shrink-0"
+                onClick={onClose}
+                type="button"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           </DrawerHeader>
 
@@ -474,11 +477,14 @@ export function EditTaskModal({ open, onClose, task, onSave, config, direction =
           </div>
 
           <DrawerFooter className="gap-3 pt-4 border-t flex-row px-6 pb-6">
-            <DrawerClose asChild>
-              <Button type="button" variant="outline" className="flex-1 h-11">
-                Cancel
-              </Button>
-            </DrawerClose>
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="flex-1 h-11"
+              onClick={onClose}
+            >
+              Cancel
+            </Button>
             <Button type="submit" className="flex-1 h-11 gap-2">
               <Save className="h-4 w-4" />
               Save Changes
