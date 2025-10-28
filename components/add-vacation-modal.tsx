@@ -32,6 +32,7 @@ interface AddVacationModalProps {
   onSave: (vacation: Vacation) => void
   memberName: string
   editingVacation?: Vacation | null
+  prefilledStartDate?: string | null
 }
 
 export function AddVacationModal({ 
@@ -39,7 +40,8 @@ export function AddVacationModal({
   onClose, 
   onSave, 
   memberName,
-  editingVacation 
+  editingVacation,
+  prefilledStartDate
 }: AddVacationModalProps) {
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
@@ -53,12 +55,12 @@ export function AddVacationModal({
       setDescription(editingVacation.description || "")
       setAbsenceType(editingVacation.type || "vacation")
     } else {
-      setStartDate("")
-      setEndDate("")
+      setStartDate(prefilledStartDate || "")
+      setEndDate(prefilledStartDate || "")
       setDescription("")
       setAbsenceType("vacation")
     }
-  }, [editingVacation, open])
+  }, [editingVacation, open, prefilledStartDate])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -113,13 +115,13 @@ export function AddVacationModal({
                 <SelectContent>
                   <SelectItem value="vacation">
                     <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 rounded bg-gradient-to-r from-purple-200 to-purple-300" />
+                      <div className="w-4 h-4 rounded bg-purple-200" />
                       <span>Vacaciones</span>
                     </div>
                   </SelectItem>
                   <SelectItem value="license">
                     <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 rounded bg-gradient-to-r from-amber-200 to-amber-300" />
+                      <div className="w-4 h-4 rounded bg-amber-200" />
                       <span>Licencia</span>
                     </div>
                   </SelectItem>

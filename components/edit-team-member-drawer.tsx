@@ -35,13 +35,18 @@ export interface TeamMember {
   comments?: Comment[]
 }
 
+interface WeekAssignment {
+  weekId: string
+  assignees: string[]
+}
+
 interface Task {
   id: string
   name: string
   priority: string
   track: string
   status: string
-  weeks: Array<{ weekId: string; assignees: string[] }>
+  assignments: WeekAssignment[]
 }
 
 interface EditTeamMemberDrawerProps {
@@ -172,8 +177,8 @@ export function EditTeamMemberDrawer({
 
   // Filtrar las tareas donde el miembro está involucrado
   const memberTasks = tasks.filter(task => 
-    task.weeks.some(week => 
-      week.assignees.some(assignee => assignee === member?.name)
+    task.assignments.some(assignment => 
+      assignment.assignees.some(assignee => assignee === member?.name)
     )
   )
 
@@ -210,7 +215,7 @@ export function EditTeamMemberDrawer({
   if (!member) return null
 
   return (
-    <Drawer open={open} onOpenChange={onClose} direction={direction}>
+    <Drawer open={open} onOpenChange={onClose} direction={direction} dismissible={true} modal={true}>
       <DrawerContent
         className={`${
           direction === "left" ? "left-0" : "right-0"

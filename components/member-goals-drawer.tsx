@@ -42,13 +42,18 @@ export interface TeamMember {
   goals?: Goal[]
 }
 
+interface WeekAssignment {
+  weekId: string
+  assignees: string[]
+}
+
 interface Task {
   id: string
   name: string
   priority: string
   track: string
   status: string
-  weeks: Array<{ weekId: string; assignees: string[] }>
+  assignments: WeekAssignment[]
 }
 
 interface Track {
@@ -92,8 +97,8 @@ export function MemberGoalsDrawer({
 
   // Filtrar las tareas donde el miembro está involucrado
   const memberTasks = tasks.filter(task => 
-    task.weeks.some(week => 
-      week.assignees.some(assignee => assignee === member.name)
+    task.assignments.some(assignment => 
+      assignment.assignees.some(assignee => assignee === member.name)
     )
   )
 
@@ -196,7 +201,7 @@ export function MemberGoalsDrawer({
     : 0
 
   return (
-    <Drawer open={open} onOpenChange={onClose} direction="right">
+    <Drawer open={open} onOpenChange={onClose} direction="right" dismissible={true} modal={true}>
       <DrawerContent
         className="right-0 h-full w-[800px] overflow-hidden flex flex-col"
       >

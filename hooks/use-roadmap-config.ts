@@ -38,12 +38,21 @@ export type GoalRating = "Below" | "Meet" | "Above"
 
 export interface Goal {
   id: string
+  // Campos básicos (legacy)
   description: string
-  rating?: GoalRating // Opcional
+  rating?: GoalRating
   extraMiles: string
   track: string
   completed: boolean
   createdAt: number
+  // Nuevos campos extendidos
+  objective?: string // Objetivo (multilinea)
+  expectations?: string // Expectativas (multilinea)
+  deadline?: string // Deadline (date ISO format)
+  experienceMapRelation?: string // Relación con experience map (multilinea)
+  nextStep?: string // Next step (multilinea)
+  justification?: string // Justificación (multilinea)
+  associatedTasks?: string[] // IDs de tareas asociadas
 }
 
 export interface TeamMember {

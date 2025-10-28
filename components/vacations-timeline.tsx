@@ -34,6 +34,7 @@ export function VacationsTimeline({ members, onUpdateMember }: VacationsTimeline
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [editingVacation, setEditingVacation] = useState<Vacation | null>(null)
+  const [prefilledDate, setPrefilledDate] = useState<string | null>(null)
 
   // Generar todos los días del mes
   const daysInMonth = useMemo(() => {
@@ -127,11 +128,11 @@ export function VacationsTimeline({ members, onUpdateMember }: VacationsTimeline
             {/* Leyenda */}
             <div className="flex items-center gap-3 text-sm">
               <div className="flex items-center gap-1.5">
-                <div className="w-4 h-4 rounded bg-gradient-to-r from-purple-200 to-purple-300" />
+                <div className="w-4 h-4 rounded bg-purple-200" />
                 <span className="text-muted-foreground">Vacaciones</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="w-4 h-4 rounded bg-gradient-to-r from-amber-200 to-amber-300" />
+                <div className="w-4 h-4 rounded bg-amber-200" />
                 <span className="text-muted-foreground">Licencias</span>
               </div>
             </div>
@@ -221,6 +222,7 @@ export function VacationsTimeline({ members, onUpdateMember }: VacationsTimeline
                           onClick={() => {
                             setSelectedMember(member)
                             setEditingVacation(null)
+                            setPrefilledDate(null)
                             setIsAddModalOpen(true)
                           }}
                           title="Agregar ausencia"
@@ -234,6 +236,12 @@ export function VacationsTimeline({ members, onUpdateMember }: VacationsTimeline
                     {daysInMonth.map((day, dayIndex) => {
                       const isInVacation = isDateInVacation(day, member.vacations)
                       const vacation = getVacationForDate(day, member.vacations)
+                      const nextDay = dayIndex < daysInMonth.length - 1 ? daysInMonth[dayIndex + 1] : null
+                      const prevDay = dayIndex > 0 ? daysInMonth[dayIndex - 1] : null
+                      const nextDayVacation = nextDay ? getVacationForDate(nextDay, member.vacations) : null
+                      const prevDayVacation = prevDay ? getVacationForDate(prevDay, member.vacations) : null
+                      const isNextDaySameVacation = nextDayVacation?.id === vacation?.id
+                      const isPrevDaySameVacation = prevDayVacation?.id === vacation?.id
                       const isToday = day.toDateString() === new Date().toDateString()
                       const isWeekend = day.getDay() === 0 || day.getDay() === 6
                       const isFirstDay = vacation && day.toDateString() === new Date(vacation.startDate).toDateString()
@@ -242,34 +250,39 @@ export function VacationsTimeline({ members, onUpdateMember }: VacationsTimeline
                       return (
                         <td 
                           key={dayIndex}
-                          className={`border-r border-b p-0 relative w-[32px] min-w-[32px] max-w-[32px] ${
+                          className={`border-b p-0 relative w-[32px] min-w-[32px] max-w-[32px] ${
+                            isInVacation && isNextDaySameVacation ? '' : 'border-r'
+                          } ${
                             isWeekend ? 'bg-gray-100 dark:bg-gray-900/50' : 'bg-background'
                           } ${isToday ? 'ring-2 ring-blue-500 ring-inset' : ''}`}
+                          onDoubleClick={() => {
+                            if (!isInVacation) {
+                              setSelectedMember(member)
+                              setEditingVacation(null)
+                              setPrefilledDate(day.toISOString().split('T')[0])
+                              setIsAddModalOpen(true)
+                            }
+                          }}
                         >
                           {isInVacation && vacation ? (
                             <div 
-                              className={`h-full min-h-[42px] flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity group/cell relative ${
+                              className={`h-full min-h-[42px] flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity group/cell relative ${
+                                isFirstDay || !isPrevDaySameVacation ? 'rounded-l-md' : ''
+                              } ${
+                                isLastDay || !isNextDaySameVacation ? 'rounded-r-md' : ''
+                              } ${
                                 vacation.type === 'license' 
-                                  ? 'bg-gradient-to-r from-amber-200 to-amber-300' 
-                                  : 'bg-gradient-to-r from-purple-200 to-purple-300'
+                                  ? 'bg-amber-200' 
+                                  : 'bg-purple-200'
                               }`}
                               onClick={() => {
                                 setSelectedMember(member)
                                 setEditingVacation(vacation)
+                                setPrefilledDate(null)
                                 setIsAddModalOpen(true)
                               }}
                               title={vacation.description || (vacation.type === 'license' ? 'Licencia' : 'Vacaciones')}
                             >
-                              {/* Indicador visual en bordes redondeados */}
-                              <div className={`absolute inset-0 ${
-                                isFirstDay ? 'rounded-l-md' : ''
-                              } ${
-                                isLastDay ? 'rounded-r-md' : ''
-                              } ${
-                                vacation.type === 'license' 
-                                  ? 'bg-gradient-to-r from-amber-200 to-amber-300' 
-                                  : 'bg-gradient-to-r from-purple-200 to-purple-300'
-                              }`} />
                               {/* Emoji indicador */}
                               {isFirstDay && (
                                 <span className="text-[10px] relative z-10">
@@ -278,7 +291,7 @@ export function VacationsTimeline({ members, onUpdateMember }: VacationsTimeline
                               )}
                             </div>
                           ) : (
-                            <div className="h-full min-h-[42px]" />
+                            <div className="h-full min-h-[42px] cursor-pointer hover:bg-muted/30 transition-colors" />
                           )}
                         </td>
                       )
@@ -299,6 +312,7 @@ export function VacationsTimeline({ members, onUpdateMember }: VacationsTimeline
             setIsAddModalOpen(false)
             setSelectedMember(null)
             setEditingVacation(null)
+            setPrefilledDate(null)
           }}
           onSave={(vacation) => {
             if (editingVacation) {
@@ -306,9 +320,11 @@ export function VacationsTimeline({ members, onUpdateMember }: VacationsTimeline
             } else {
               handleAddVacation(selectedMember, vacation)
             }
+            setPrefilledDate(null)
           }}
           memberName={selectedMember.name}
           editingVacation={editingVacation}
+          prefilledStartDate={prefilledDate}
         />
       )}
     </Card>

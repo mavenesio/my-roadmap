@@ -157,7 +157,7 @@ export function EditTaskModal({ open, onClose, task, onSave, config, direction =
   }
 
   return (
-    <Drawer open={open} onOpenChange={onClose} direction={direction}>
+    <Drawer open={open} onOpenChange={onClose} direction={direction} dismissible={true} modal={true}>
       <DrawerContent>
         <form onSubmit={handleSubmit} className="flex flex-col h-full">
           <DrawerHeader className="space-y-3 pb-4 border-b px-6 pt-6">

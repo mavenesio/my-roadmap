@@ -11,9 +11,10 @@ import { AddTaskModal } from "@/components/add-task-modal"
 import { EditTaskModal } from "./edit-task-modal"
 import { QuarterYearModal } from "@/components/quarter-year-modal"
 import { MetricsPanel } from "@/components/metrics-panel"
+import { TodoListDrawer } from "@/components/todo-list-drawer"
 import { useRoadmapConfig } from "@/hooks/use-roadmap-config"
 import { useLocalStorage } from "@/hooks/use-local-storage"
-import { Download, Upload, X, ChevronDown, ChevronRight, GripVertical, Pin, PinOff, MessageSquare, Edit2, Users } from "lucide-react"
+import { Download, Upload, X, ChevronDown, ChevronRight, GripVertical, Pin, PinOff, MessageSquare, Edit2, Users, ListTodo } from "lucide-react"
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, DragEndEvent } from "@dnd-kit/core"
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
@@ -121,9 +122,14 @@ export function RoadmapGantt() {
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isStickyFooter, setIsStickyFooter] = useState(true)
+  const [isTodoDrawerOpen, setIsTodoDrawerOpen] = useState(false)
+  const [globalTodos] = useLocalStorage<any[]>('global-todo-list', [])
   const router = useRouter()
   const searchParams = useSearchParams()
   const [filtersInitialized, setFiltersInitialized] = useState(false)
+
+  // Calcular contador de TODOs pendientes
+  const pendingTodosCount = globalTodos.filter(t => t.status !== "DONE").length
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -255,6 +261,7 @@ export function RoadmapGantt() {
     const exportData = {
       config,
       tasks,
+      todos: globalTodos,
       exportedAt: new Date().toISOString(),
       version: "1.0.0"
     }
@@ -296,6 +303,11 @@ export function RoadmapGantt() {
             // Formato antiguo - solo tareas
             setTasks(importedData)
           }
+
+          // Importar TODOs
+          if (importedData.todos) {
+            localStorage.setItem('global-todo-list', JSON.stringify(importedData.todos))
+          }
           
         } catch (error) {
           console.error("Error importing file:", error)
@@ -330,6 +342,11 @@ export function RoadmapGantt() {
         } else if (Array.isArray(importedData)) {
           // Formato antiguo - solo tareas
           setTasks(importedData)
+        }
+
+        // Importar TODOs
+        if (importedData.todos) {
+          localStorage.setItem('global-todo-list', JSON.stringify(importedData.todos))
         }
         
         setShowQuarterModal(false)
@@ -446,6 +463,63 @@ export function RoadmapGantt() {
     }))
   }, [getMonthWeeks])
 
+  // Función para calcular cuántos días de ausencia tiene una persona en una semana específica
+  const getVacationDaysInWeek = useCallback((memberName: string, week: { date: string }) => {
+    const member = config?.teamMembers.find(m => m.name === memberName)
+    if (!member || !member.vacations || member.vacations.length === 0) {
+      return { days: 0, type: null }
+    }
+
+    const [ddStr, mmStr] = week.date.split('-')
+    const dd = parseInt(ddStr, 10)
+    const mm = parseInt(mmStr, 10)
+    if (Number.isNaN(dd) || Number.isNaN(mm)) return { days: 0, type: null }
+
+    const year = config?.year ?? new Date().getFullYear()
+    const weekStart = new Date(year, mm - 1, dd) // Lunes
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekStart.getDate() + 4) // Viernes (lunes a viernes = 5 días)
+
+    let totalVacationDays = 0
+    let absenceType: 'vacation' | 'license' | null = null
+
+    member.vacations.forEach(vacation => {
+      const vacationStart = new Date(vacation.startDate)
+      const vacationEnd = new Date(vacation.endDate)
+
+      // Normalizar a medianoche para comparación
+      vacationStart.setHours(0, 0, 0, 0)
+      vacationEnd.setHours(0, 0, 0, 0)
+      weekStart.setHours(0, 0, 0, 0)
+      weekEnd.setHours(0, 0, 0, 0)
+
+      // Verificar si hay overlap entre las vacaciones y la semana
+      if (vacationStart <= weekEnd && vacationEnd >= weekStart) {
+        // Calcular el rango de overlap
+        const overlapStart = vacationStart > weekStart ? vacationStart : weekStart
+        const overlapEnd = vacationEnd < weekEnd ? vacationEnd : weekEnd
+
+        // Contar días laborables (lunes a viernes) en el overlap
+        let currentDay = new Date(overlapStart)
+        while (currentDay <= overlapEnd) {
+          const dayOfWeek = currentDay.getDay()
+          // 1 = Lunes, 2 = Martes, ..., 5 = Viernes
+          if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+            totalVacationDays++
+          }
+          currentDay.setDate(currentDay.getDate() + 1)
+        }
+        
+        // Guardar el tipo de ausencia (priorizar el primer tipo encontrado)
+        if (totalVacationDays > 0 && !absenceType) {
+          absenceType = vacation.type || 'vacation'
+        }
+      }
+    })
+
+    return { days: totalVacationDays, type: absenceType }
+  }, [config])
+
   const getWeekRangeLabel = (week: { date: string }) => {
     // week.date format: dd-mm (monday of that week)
     const [ddStr, mmStr] = week.date.split('-')
@@ -548,7 +622,7 @@ export function RoadmapGantt() {
   }, [months, collapsedMonths, getMonthWeeks])
 
   // Definir SortableRow antes del return
-  const SortableRow = memo(({ task }: { task: Task }) => {
+  const SortableRow = memo(({ task, getVacationDaysInWeek }: { task: Task; getVacationDaysInWeek: (memberName: string, week: { date: string }) => { days: number; type: 'vacation' | 'license' | null } }) => {
     const [openAssignmentSelect, setOpenAssignmentSelect] = useState<string | null>(null)
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
     const style: React.CSSProperties = {
@@ -700,28 +774,37 @@ export function RoadmapGantt() {
                         </div>
                       )}
                       <div className="flex flex-col items-center gap-1">
-                        {assignees.map((assignee: string) => (
-                          <Badge
-                            key={assignee}
-                            variant="secondary"
-                            className="flex items-center justify-between gap-1 text-white hover:opacity-80 text-[10px] px-1 py-1 h-6"
-                            style={{ backgroundColor: getPersonColor(assignee) }}
-                          >
-                            <span className="truncate">{assignee.split(" ")[0]}</span>
-                            <button
-                              type="button"
-                              tabIndex={-1}
-                              onMouseDown={(e: React.MouseEvent) => {
-                                e.stopPropagation()
-                                e.preventDefault()
-                                handleRemoveAssignee(task.id, week.id, assignee)
-                              }}
-                              className="hover:bg-black/20 rounded-sm p-0.5"
+                        {assignees.map((assignee: string) => {
+                          const vacationInfo = getVacationDaysInWeek(assignee, week)
+                          const icon = vacationInfo.type === 'license' ? '📋' : '🏖️'
+                          return (
+                            <Badge
+                              key={assignee}
+                              variant="secondary"
+                              className="flex items-start justify-between gap-1 text-white hover:opacity-80 text-[10px] px-1.5 py-1 min-h-[24px]"
+                              style={{ backgroundColor: getPersonColor(assignee) }}
                             >
-                              <X className="h-2.5 w-2.5" />
-                            </button>
-                          </Badge>
-                        ))}
+                              <div className="flex flex-col items-start">
+                                <span className="truncate leading-tight">{assignee.split(" ")[0]}</span>
+                                {vacationInfo.days > 0 && (
+                                  <span className="text-[9px] leading-tight">{icon}{vacationInfo.days}</span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                tabIndex={-1}
+                                onMouseDown={(e: React.MouseEvent) => {
+                                  e.stopPropagation()
+                                  e.preventDefault()
+                                  handleRemoveAssignee(task.id, week.id, assignee)
+                                }}
+                                className="hover:bg-black/20 rounded-sm p-0.5 mt-0.5"
+                              >
+                                <X className="h-2.5 w-2.5" />
+                              </button>
+                            </Badge>
+                          )
+                        })}
                         {assignees.length === 0 && canAddMore && (
                           <span className="text-[10px] text-muted-foreground"> </span>
                         )}
@@ -787,6 +870,19 @@ export function RoadmapGantt() {
               Mi Equipo
             </Button>
           </Link>
+          <Button 
+            variant="outline" 
+            className="gap-2 bg-transparent relative" 
+            onClick={() => setIsTodoDrawerOpen(true)}
+          >
+            <ListTodo className="h-4 w-4" />
+            My TODO List
+            {pendingTodosCount > 0 && (
+              <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-semibold">
+                {pendingTodosCount}
+              </span>
+            )}
+          </Button>
           <Link href="/settings">
             <Button variant="outline" className="gap-2 bg-transparent">
               Configuración
@@ -810,6 +906,7 @@ export function RoadmapGantt() {
                 setTasks([])
                 localStorage.removeItem('roadmap-config')
                 localStorage.removeItem('roadmap-tasks')
+                localStorage.removeItem('global-todo-list')
                 window.location.reload()
               }
             }}
@@ -960,7 +1057,7 @@ export function RoadmapGantt() {
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={getSortedAndFilteredTasks().map(t => t.id)} strategy={verticalListSortingStrategy}>
               {getSortedAndFilteredTasks().map((task: Task) => (
-                <SortableRow key={task.id} task={task} />
+                <SortableRow key={task.id} task={task} getVacationDaysInWeek={getVacationDaysInWeek} />
               ))}
             </SortableContext>
           </DndContext>
@@ -1055,6 +1152,12 @@ export function RoadmapGantt() {
           config={config}
         />
       )}
+
+      {/* TODO List Drawer */}
+      <TodoListDrawer
+        open={isTodoDrawerOpen}
+        onClose={() => setIsTodoDrawerOpen(false)}
+      />
     </div>
   )
 }

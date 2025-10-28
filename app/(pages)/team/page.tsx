@@ -7,12 +7,18 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { ArrowLeft, UserPlus, Users, Pencil, Trash2, MessageSquare, Briefcase, Target } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { ArrowLeft, UserPlus, Users, Pencil, Trash2, MessageSquare, Briefcase, Target, Edit2 } from "lucide-react"
 import { AddTeamMemberModal } from "@/components/add-team-member-modal"
 import { EditTeamMemberDrawer } from "@/components/edit-team-member-drawer"
 import { MemberGoalsDrawer } from "@/components/member-goals-drawer"
 import { VacationsTimeline } from "@/components/vacations-timeline"
 import { toast } from "sonner"
+
+interface WeekAssignment {
+  weekId: string
+  assignees: string[]
+}
 
 interface Task {
   id: string
@@ -20,10 +26,11 @@ interface Task {
   priority: string
   track: string
   status: string
-  weeks: Array<{ weekId: string; assignees: string[] }>
+  assignments: WeekAssignment[]
 }
 
 export default function TeamPage() {
+  const router = useRouter()
   const { config, updateConfig } = useRoadmapConfig()
   const [members, setMembers] = useState<TeamMemberType[]>(config?.teamMembers || [])
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -108,8 +115,8 @@ export default function TeamPage() {
   // Contar tareas por colaborador
   const getTaskCountForMember = (memberName: string) => {
     return tasks.filter(task => 
-      task.weeks.some(week => 
-        week.assignees.some(assignee => assignee === memberName)
+      task.assignments.some(assignment => 
+        assignment.assignees.some(assignee => assignee === memberName)
       )
     ).length
   }
@@ -183,7 +190,7 @@ export default function TeamPage() {
                 </Button>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {members.map((member: TeamMemberType) => {
                   const taskCount = getTaskCountForMember(member.name)
                   const commentCount = member.comments?.length || 0
@@ -192,28 +199,35 @@ export default function TeamPage() {
                   return (
                     <div 
                       key={member.name} 
-                      className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors group"
+                      className="flex flex-col p-5 rounded-lg border bg-card hover:bg-accent/50 transition-colors group relative"
                     >
-                      {/* Avatar */}
-                      <div
-                        className="w-14 h-14 rounded-full flex items-center justify-center text-white font-semibold text-xl flex-shrink-0 cursor-pointer"
-                        style={{ backgroundColor: member.color }}
-                        onClick={() => {
-                          setEditingMember(member)
-                          setIsEditDrawerOpen(true)
+                      {/* Botón de eliminar en la esquina */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteMember(member)
                         }}
                       >
-                        {member.name.charAt(0).toUpperCase()}
-                      </div>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
 
-                      {/* Info principal */}
+                      {/* Avatar y nombre */}
                       <div 
-                        className="flex-1 min-w-0 cursor-pointer"
+                        className="flex flex-col items-center text-center cursor-pointer mb-4"
                         onClick={() => {
                           setEditingMember(member)
                           setIsEditDrawerOpen(true)
                         }}
                       >
+                        <div
+                          className="w-20 h-20 rounded-full flex items-center justify-center text-white font-semibold text-2xl mb-3"
+                          style={{ backgroundColor: member.color }}
+                        >
+                          {member.name.charAt(0).toUpperCase()}
+                        </div>
                         <div className="flex items-center gap-2 mb-1">
                           <h3 className="font-semibold text-lg">{member.name}</h3>
                           {member.nationality && (
@@ -226,7 +240,7 @@ export default function TeamPage() {
                       </div>
 
                       {/* Badges de info */}
-                      <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="flex items-center justify-center gap-2 flex-wrap mb-4">
                         {taskCount > 0 && (
                           <Badge variant="secondary" className="gap-1">
                             <Briefcase className="h-3 w-3" />
@@ -257,11 +271,11 @@ export default function TeamPage() {
                       </div>
 
                       {/* Botones de acción */}
-                      <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="flex gap-2 w-full">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="gap-2"
+                          className="gap-2 flex-1"
                           onClick={(e) => {
                             e.stopPropagation()
                             setSelectedMemberForGoals(member)
@@ -272,15 +286,16 @@ export default function TeamPage() {
                           Goals
                         </Button>
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                          className="gap-2 flex-1"
                           onClick={(e) => {
                             e.stopPropagation()
-                            handleDeleteMember(member)
+                            router.push(`/team/${encodeURIComponent(member.name)}`)
                           }}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Edit2 className="h-4 w-4" />
+                          Ver
                         </Button>
                       </div>
                     </div>

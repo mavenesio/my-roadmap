@@ -12,6 +12,8 @@ interface DrawerProps {
   onOpenChange?: (open: boolean) => void
   direction?: DrawerDirection
   shouldScaleBackground?: boolean
+  dismissible?: boolean
+  modal?: boolean
   children?: React.ReactNode
 }
 
@@ -22,6 +24,8 @@ const DrawerContext = React.createContext<{ direction: DrawerDirection }>({
 const Drawer = ({
   shouldScaleBackground = true,
   direction = "left",
+  dismissible = true,
+  modal = true,
   children,
   ...props
 }: DrawerProps) => (
@@ -29,6 +33,8 @@ const Drawer = ({
     <DrawerPrimitive.Root
       shouldScaleBackground={shouldScaleBackground}
       direction={direction}
+      dismissible={dismissible}
+      modal={modal}
       {...props}
     >
       {children}
