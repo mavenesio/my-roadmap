@@ -1,4 +1,4 @@
-"use client"
+import React, { Suspense } from "react"
 import { RoadmapGantt } from "@/components/roadmap-gantt"
 
 export default function RoadmapPage() {
@@ -10,7 +10,9 @@ export default function RoadmapPage() {
           <p className="mt-2 text-muted-foreground">Gantt chart of the team's weekly tasks for the selected quarter.</p>
         </div>
 
-        <RoadmapGantt />
+        <Suspense fallback={<div className="p-8 text-center text-muted-foreground">Cargando roadmap...</div>}>
+          <RoadmapGantt />
+        </Suspense>
       </div>
     </div>
   )
