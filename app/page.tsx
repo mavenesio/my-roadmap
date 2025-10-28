@@ -1,4 +1,4 @@
-import React from "react"
+import React, { Suspense } from "react"
 import { RoadmapGantt } from "@/components/roadmap-gantt"
 
 export default function RoadmapPage() {
@@ -10,10 +10,10 @@ export default function RoadmapPage() {
           <p className="mt-2 text-muted-foreground">Gantt chart of the team's weekly tasks for the selected quarter.</p>
         </div>
 
-        <React.Suspense fallback={<div className="py-10 text-center text-muted-foreground">Cargando roadmap...</div>}>
-          {/* RoadmapGantt is a client component and uses next/navigation hooks; it must be rendered inside a Suspense boundary to avoid CSR bailout during prerender. */}
+        <Suspense fallback={<div className="p-8 text-center text-muted-foreground">Cargando roadmap...</div>}>
+          {/* RoadmapGantt is a client component that uses useSearchParams(); wrapping it in Suspense prevents the CSR bailout error during prerender */}
           <RoadmapGantt />
-        </React.Suspense>
+        </Suspense>
       </div>
     </div>
   )
