@@ -1,7 +1,6 @@
 import React, { Suspense } from "react"
-import dynamic from "next/dynamic"
 
-const RoadmapGanttClient = dynamic(() => import("@/components/roadmap-gantt-client"), { ssr: false })
+import RoadmapGanttClient from "@/components/roadmap-gantt-client"
 
 export default function RoadmapPage() {
   return (
