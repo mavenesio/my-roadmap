@@ -3,6 +3,7 @@
 import type React from "react"
 import { useEffect, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   Drawer,
   DrawerContent,
@@ -15,9 +16,10 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RoadmapConfig } from "@/hooks/use-roadmap-config"
-import { Edit3, Save, MessageSquare, Trash2, Pencil, Check, X, Info, Clock } from "lucide-react"
+import { Edit3, Save, MessageSquare, Trash2, Pencil, Check, X, Info, Clock, RefreshCw, ExternalLink } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { JiraSubtasksSection } from "./jira-subtasks-section"
 
 type Priority = "Milestone" | "1" | "2" | "3"
 type Track = string
@@ -40,6 +42,23 @@ interface Comment {
   createdAt: number
 }
 
+interface JiraSubtask {
+  id: string
+  key: string
+  title: string
+  status: string
+  assignee?: {
+    id: string
+    displayName: string
+    avatarUrl: string
+  }
+  startDate?: string
+  endDate?: string
+  createdAt?: string
+  updatedAt?: string
+  description?: string
+}
+
 interface EditTaskModalProps {
   open: boolean
   task: {
@@ -51,6 +70,10 @@ interface EditTaskModalProps {
     size: Size
     type: TaskType
     comments?: Comment[]
+    jiraEpicKey?: string
+    jiraEpicId?: string
+    jiraEpicUrl?: string
+    jiraSubtasks?: JiraSubtask[]
   }
   onClose: () => void
   onSave: (changes: {
@@ -62,11 +85,12 @@ interface EditTaskModalProps {
     type?: TaskType
     comments?: Comment[]
   }) => void
+  onSyncFromJira?: (taskId: string, jiraEpicKey: string) => Promise<void>
   config: RoadmapConfig
   direction?: "left" | "right"
 }
 
-export function EditTaskModal({ open, onClose, task, onSave, config, direction = "left" }: EditTaskModalProps) {
+export function EditTaskModal({ open, onClose, task, onSave, onSyncFromJira, config, direction = "left" }: EditTaskModalProps) {
   const [name, setName] = useState(task.name)
   const [priority, setPriority] = useState<Priority>(task.priority)
   const [track, setTrack] = useState<Track>(task.track)
@@ -78,6 +102,7 @@ export function EditTaskModal({ open, onClose, task, onSave, config, direction =
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentText, setEditingCommentText] = useState("")
   const [showMarkdownHelp, setShowMarkdownHelp] = useState(false)
+  const [isSyncingFromJira, setIsSyncingFromJira] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const commentsEndRef = useRef<HTMLDivElement>(null)
 
@@ -155,6 +180,19 @@ export function EditTaskModal({ open, onClose, task, onSave, config, direction =
     return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
+  const handleSyncFromJira = async () => {
+    if (!task.jiraEpicKey || !onSyncFromJira) return
+    
+    setIsSyncingFromJira(true)
+    try {
+      await onSyncFromJira(task.id, task.jiraEpicKey)
+    } catch (error) {
+      console.error('Error syncing from Jira:', error)
+    } finally {
+      setIsSyncingFromJira(false)
+    }
+  }
+
   return (
     <Drawer open={open} onOpenChange={onClose} direction={direction} dismissible={false} modal={true}>
       <DrawerContent>
@@ -166,10 +204,40 @@ export function EditTaskModal({ open, onClose, task, onSave, config, direction =
               </div>
               <div className="flex-1 min-w-0">
                 <DrawerTitle className="text-2xl">Edit Task</DrawerTitle>
-                <DrawerDescription className="text-base mt-1">
+                <DrawerDescription className="text-base mt-1 flex items-center gap-2">
                   Update task details and properties
+                  {task.jiraEpicKey && (
+                    <Badge variant="outline" className="text-xs">
+                      <code className="font-mono">{task.jiraEpicKey}</code>
+                    </Badge>
+                  )}
                 </DrawerDescription>
               </div>
+              {task.jiraEpicUrl && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(task.jiraEpicUrl, '_blank')}
+                  className="gap-2 flex-shrink-0"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Ver en Jira
+                </Button>
+              )}
+              {task.jiraEpicKey && onSyncFromJira && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSyncFromJira}
+                  disabled={isSyncingFromJira}
+                  className="gap-2 flex-shrink-0"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isSyncingFromJira ? 'animate-spin' : ''}`} />
+                  {isSyncingFromJira ? 'Actualizando...' : 'Actualizar desde Jira'}
+                </Button>
+              )}
               <Button 
                 variant="ghost" 
                 size="icon" 
@@ -182,7 +250,8 @@ export function EditTaskModal({ open, onClose, task, onSave, config, direction =
             </div>
           </DrawerHeader>
 
-          <div className="flex-1 overflow-y-auto px-6 space-y-6 py-6">
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-6 space-y-6 py-6">
             {/* Task Name */}
             <div className="space-y-2">
               <Label htmlFor="name" className="text-base font-semibold">
@@ -305,10 +374,20 @@ export function EditTaskModal({ open, onClose, task, onSave, config, direction =
                 </Select>
               </div>
             </div>
+
+              {/* Jira Subtasks Section */}
+              {task.jiraSubtasks && task.jiraSubtasks.length > 0 && (
+                <div className="pt-6">
+                  <JiraSubtasksSection 
+                    subtasks={task.jiraSubtasks}
+                    jiraDomain={task.jiraEpicUrl ? new URL(task.jiraEpicUrl).origin : undefined}
+                  />
+                </div>
+              )}
           </div>
 
           {/* Comments Section */}
-          <div className="border-t flex flex-col min-h-0 flex-1">
+            <div className="border-t">
             <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/30">
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-5 w-5 text-primary" />
@@ -328,7 +407,7 @@ export function EditTaskModal({ open, onClose, task, onSave, config, direction =
               </Button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+              <div className="px-6 py-5 space-y-5">
               {/* Markdown Help */}
               {showMarkdownHelp && (
                 <div className="bg-muted/50 rounded-lg p-4 text-xs space-y-2 border border-border">
@@ -473,6 +552,7 @@ export function EditTaskModal({ open, onClose, task, onSave, config, direction =
                   No hay comentarios aún. ¡Sé el primero en comentar!
                 </div>
               )}
+              </div>
             </div>
           </div>
 

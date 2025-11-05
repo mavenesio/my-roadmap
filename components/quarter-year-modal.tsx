@@ -52,37 +52,46 @@ export function QuarterYearModal({ open, onConfirm, onImport }: QuarterYearModal
     const weeks = []
     let globalWeekNumber = 1
     
-    for (let month = startMonth; month <= endMonth; month++) {
-      const firstDay = new Date(year, month, 1)
-      const lastDay = new Date(year, month + 1, 0)
+    const monthNames = [
+      "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+      "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"
+    ]
+    
+    // Primer día del trimestre
+    const quarterStart = new Date(year, startMonth, 1)
+    
+    // Encontrar el primer lunes del trimestre (o el lunes anterior si el trimestre no empieza en lunes)
+    const firstMonday = new Date(quarterStart)
+    const dayOfWeek = quarterStart.getDay()
+    const daysToMonday = dayOfWeek === 0 ? 1 : dayOfWeek === 1 ? 0 : 8 - dayOfWeek
+    firstMonday.setDate(quarterStart.getDate() + daysToMonday)
+    
+    // Último día del trimestre
+    const quarterEnd = new Date(year, endMonth + 1, 0)
+    
+    // Generar semanas continuas desde el primer lunes hasta cubrir todo el trimestre
+    let currentMonday = new Date(firstMonday)
+    
+    while (currentMonday <= quarterEnd) {
+      const weekEnd = new Date(currentMonday)
+      weekEnd.setDate(currentMonday.getDate() + 6) // Domingo de esa semana
       
-      // Encontrar el primer lunes del mes
-      const firstMonday = new Date(firstDay)
-      const dayOfWeek = firstDay.getDay()
-      const daysToMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek
-      firstMonday.setDate(firstDay.getDate() + daysToMonday)
+      // Determinar a qué mes pertenece la semana
+      // Usamos el criterio: el mes donde cae el lunes de la semana
+      const weekMonth = currentMonday.getMonth()
       
-      // Generar semanas desde el primer lunes hasta el final del mes
-      let currentWeek = new Date(firstMonday)
-      
-      while (currentWeek <= lastDay) {
-        const weekEnd = new Date(currentWeek)
-        weekEnd.setDate(currentWeek.getDate() + 6)
-        
-        const monthNames = [
-          "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
-          "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"
-        ]
-        
+      // Solo incluir la semana si el lunes está dentro del rango del trimestre o después
+      if (currentMonday >= quarterStart || weekEnd >= quarterStart) {
         weeks.push({
           id: `W${globalWeekNumber}`,
-          date: `${currentWeek.getDate().toString().padStart(2, '0')}-${(currentWeek.getMonth() + 1).toString().padStart(2, '0')}`,
-          month: monthNames[month]
+          date: `${currentMonday.getDate().toString().padStart(2, '0')}-${(currentMonday.getMonth() + 1).toString().padStart(2, '0')}`,
+          month: monthNames[weekMonth]
         })
-        
-        currentWeek.setDate(currentWeek.getDate() + 7)
         globalWeekNumber++
       }
+      
+      // Avanzar al siguiente lunes
+      currentMonday.setDate(currentMonday.getDate() + 7)
     }
     
     return weeks

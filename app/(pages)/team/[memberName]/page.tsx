@@ -12,8 +12,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
-import { ArrowLeft, Save, Plus, Trash2, CheckCircle, Circle, Briefcase, MessageSquare, Target, Calendar } from "lucide-react"
+import { ArrowLeft, Save, Plus, Trash2, CheckCircle, Circle, Briefcase, MessageSquare, Target, Calendar, Eye, Edit } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 
 interface WeekAssignment {
   weekId: string
@@ -33,25 +37,33 @@ interface Feedback {
   id: string
   text: string
   createdAt: number
-  author?: string
+  from?: string // Nombre de quien da el feedback
+  seniority?: string // Puesto/Seniority
+  team?: string // Equipo
+  author?: string // Deprecated: mantener por compatibilidad
 }
 
 export default function MemberDetailPage() {
   const params = useParams()
   const router = useRouter()
   const memberName = decodeURIComponent(params.memberName as string)
-  const { config, updateConfig } = useRoadmapConfig()
+  const { config, updateTeamMember } = useRoadmapConfig()
   const [tasks] = useLocalStorage<Task[]>('roadmap-tasks', [])
   const [mounted, setMounted] = useState(false)
 
   // State para datos editables
   const [editedName, setEditedName] = useState(memberName)
-  const [editedNationality, setEditedNationality] = useState("")
-  const [editedSeniority, setEditedSeniority] = useState("")
+  const [editedNationality, setEditedNationality] = useState<string>("none")
+  const [editedSeniority, setEditedSeniority] = useState<string>("none")
+  const [editedAvatarUrl, setEditedAvatarUrl] = useState<string>("")
   
   // State para feedbacks
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
   const [newFeedback, setNewFeedback] = useState("")
+  const [newFeedbackFrom, setNewFeedbackFrom] = useState("")
+  const [newFeedbackSeniority, setNewFeedbackSeniority] = useState("")
+  const [newFeedbackTeam, setNewFeedbackTeam] = useState("")
+  const [showMarkdownPreview, setShowMarkdownPreview] = useState(false)
   
   // State para objetivos
   const [goals, setGoals] = useState<Goal[]>([])
@@ -90,20 +102,31 @@ export default function MemberDetailPage() {
   useEffect(() => {
     if (member) {
       setEditedName(member.name)
-      setEditedNationality(member.nationality || "")
-      setEditedSeniority(member.seniority || "")
+      setEditedNationality(member.nationality || "none")
+      setEditedSeniority(member.seniority || "none")
+      setEditedAvatarUrl(member.avatarUrl || "")
       setFeedbacks(member.comments || [])
       setGoals(member.goals || [])
     }
   }, [member])
 
-  if (!mounted || !config || !member) {
+  // Show loading only while mounting
+  if (!mounted || !config) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <p className="text-muted-foreground">
-            {!member ? "Miembro no encontrado" : "Cargando..."}
-          </p>
+          <p className="text-muted-foreground">Cargando...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show not found only after mounted
+  if (!member) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground">Miembro no encontrado</p>
           <Link href="/team">
             <Button variant="outline" className="mt-4">
               Volver al equipo
@@ -115,18 +138,22 @@ export default function MemberDetailPage() {
   }
 
   const handleSaveMemberData = () => {
-    const updatedMember: TeamMemberType = {
-      ...member,
+    const updates = {
       name: editedName,
-      nationality: editedNationality || undefined,
-      seniority: editedSeniority || undefined,
+      nationality: editedNationality === "none" ? undefined : editedNationality,
+      seniority: editedSeniority === "none" ? undefined : editedSeniority,
+      avatarUrl: editedAvatarUrl.trim() || undefined,
     }
 
-    const updatedMembers = config.teamMembers.map(m =>
-      m.name === memberName ? updatedMember : m
-    )
-
-    updateConfig({ teamMembers: updatedMembers })
+    const success = updateTeamMember(memberName, updates)
+    
+    if (!success) {
+      toast.error("Error", {
+        description: "No se pudo actualizar el miembro",
+        duration: 3000,
+      })
+      return
+    }
     
     toast.success("Datos actualizados", {
       description: "Los datos del miembro han sido guardados",
@@ -146,22 +173,28 @@ export default function MemberDetailPage() {
       id: Date.now().toString(),
       text: newFeedback.trim(),
       createdAt: Date.now(),
+      from: newFeedbackFrom.trim() || undefined,
+      seniority: newFeedbackSeniority.trim() || undefined,
+      team: newFeedbackTeam.trim() || undefined,
     }
 
     const updatedFeedbacks = [...feedbacks, feedback]
     setFeedbacks(updatedFeedbacks)
 
-    const updatedMember: TeamMemberType = {
-      ...member,
+    const success = updateTeamMember(memberName, {
       comments: updatedFeedbacks
+    })
+    
+    if (!success) {
+      toast.error("Error al agregar feedback")
+      return
     }
 
-    const updatedMembers = config.teamMembers.map(m =>
-      m.name === memberName ? updatedMember : m
-    )
-
-    updateConfig({ teamMembers: updatedMembers })
     setNewFeedback("")
+    setNewFeedbackFrom("")
+    setNewFeedbackSeniority("")
+    setNewFeedbackTeam("")
+    setShowMarkdownPreview(false)
     
     toast.success("Feedback agregado")
   }
@@ -172,16 +205,14 @@ export default function MemberDetailPage() {
     const updatedFeedbacks = feedbacks.filter(f => f.id !== feedbackId)
     setFeedbacks(updatedFeedbacks)
 
-    const updatedMember: TeamMemberType = {
-      ...member,
+    const success = updateTeamMember(memberName, {
       comments: updatedFeedbacks
+    })
+    
+    if (!success) {
+      toast.error("Error al eliminar feedback")
+      return
     }
-
-    const updatedMembers = config.teamMembers.map(m =>
-      m.name === memberName ? updatedMember : m
-    )
-
-    updateConfig({ teamMembers: updatedMembers })
     
     toast.success("Feedback eliminado")
   }
@@ -213,16 +244,14 @@ export default function MemberDetailPage() {
 
     setGoals(updatedGoals)
 
-    const updatedMember: TeamMemberType = {
-      ...member,
+    const success = updateTeamMember(memberName, {
       goals: updatedGoals
+    })
+    
+    if (!success) {
+      toast.error("Error al guardar objetivo")
+      return
     }
-
-    const updatedMembers = config.teamMembers.map(m =>
-      m.name === memberName ? updatedMember : m
-    )
-
-    updateConfig({ teamMembers: updatedMembers })
     
     // Reset form
     setGoalForm({
@@ -262,16 +291,14 @@ export default function MemberDetailPage() {
     const updatedGoals = goals.filter(g => g.id !== goalId)
     setGoals(updatedGoals)
 
-    const updatedMember: TeamMemberType = {
-      ...member,
+    const success = updateTeamMember(memberName, {
       goals: updatedGoals
+    })
+    
+    if (!success) {
+      toast.error("Error al eliminar objetivo")
+      return
     }
-
-    const updatedMembers = config.teamMembers.map(m =>
-      m.name === memberName ? updatedMember : m
-    )
-
-    updateConfig({ teamMembers: updatedMembers })
     
     toast.success("Objetivo eliminado")
   }
@@ -302,12 +329,24 @@ export default function MemberDetailPage() {
             </Button>
           </Link>
           <div className="flex items-center gap-3">
+            {member.avatarUrl ? (
+              <Avatar className="w-10 h-10">
+                <AvatarImage src={member.avatarUrl} alt={member.name} />
+                <AvatarFallback 
+                  className="text-white font-semibold text-lg"
+                  style={{ backgroundColor: member.color }}
+                >
+                  {member.name.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            ) : (
             <div
               className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-lg"
               style={{ backgroundColor: member.color }}
             >
               {member.name.charAt(0).toUpperCase()}
             </div>
+            )}
             <div>
               <h1 className="text-lg font-semibold">{member.name}</h1>
               {member.seniority && (
@@ -328,6 +367,41 @@ export default function MemberDetailPage() {
             <CardDescription className="text-sm">Edita los datos básicos del miembro</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            {/* Avatar Preview */}
+            <div className="flex items-center gap-4 p-3 border rounded-lg bg-muted/30">
+              <div className="flex items-center gap-3">
+                {editedAvatarUrl ? (
+                  <Avatar className="w-16 h-16">
+                    <AvatarImage src={editedAvatarUrl} alt={editedName} />
+                    <AvatarFallback 
+                      className="text-white font-semibold text-xl"
+                      style={{ backgroundColor: member.color }}
+                    >
+                      {editedName.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <div
+                    className="w-16 h-16 rounded-full flex items-center justify-center text-white font-semibold text-xl"
+                    style={{ backgroundColor: member.color }}
+                  >
+                    {editedName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="flex-1">
+                  <Label htmlFor="avatarUrl" className="text-sm font-medium">Avatar URL</Label>
+                  <p className="text-xs text-muted-foreground mb-1.5">URL de la imagen del avatar (opcional)</p>
+                  <Input
+                    id="avatarUrl"
+                    value={editedAvatarUrl}
+                    onChange={(e) => setEditedAvatarUrl(e.target.value)}
+                    placeholder="https://ejemplo.com/avatar.jpg"
+                    className="h-8 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="name" className="text-sm">Nombre</Label>
@@ -346,6 +420,7 @@ export default function MemberDetailPage() {
                     <SelectValue placeholder="Seleccionar nacionalidad" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="none">Sin especificar</SelectItem>
                     <SelectItem value="Argentina">🇦🇷 Argentina</SelectItem>
                     <SelectItem value="Colombia">🇨🇴 Colombia</SelectItem>
                     <SelectItem value="Brasil">🇧🇷 Brasil</SelectItem>
@@ -360,13 +435,21 @@ export default function MemberDetailPage() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="seniority" className="text-sm">Seniority</Label>
-                <Input
-                  id="seniority"
-                  value={editedSeniority}
-                  onChange={(e) => setEditedSeniority(e.target.value)}
-                  placeholder="Ej: Senior Developer"
-                  className="h-9"
-                />
+                <Select value={editedSeniority} onValueChange={setEditedSeniority}>
+                  <SelectTrigger id="seniority" className="h-9">
+                    <SelectValue placeholder="Seleccionar seniority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin especificar</SelectItem>
+                    <SelectItem value="Trainee">Trainee</SelectItem>
+                    <SelectItem value="Junior">Junior</SelectItem>
+                    <SelectItem value="Semi Senior">Semi Senior</SelectItem>
+                    <SelectItem value="Senior">Senior</SelectItem>
+                    <SelectItem value="Tech Lead">Tech Lead</SelectItem>
+                    <SelectItem value="Staff">Staff</SelectItem>
+                    <SelectItem value="Principal">Principal</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5 flex items-end">
                 <Button onClick={handleSaveMemberData} className="gap-2 h-9 w-full" size="sm">
@@ -455,13 +538,85 @@ export default function MemberDetailPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {/* Agregar nuevo feedback */}
-            <div className="space-y-2">
-              <Textarea
-                placeholder="Escribe un nuevo feedback..."
-                value={newFeedback}
-                onChange={(e) => setNewFeedback(e.target.value)}
-                className="min-h-[60px] text-sm"
-              />
+            <div className="space-y-3 p-4 rounded-md border bg-muted/30">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="feedbackFrom" className="text-sm">From (Quién da el feedback)</Label>
+                  <Input
+                    id="feedbackFrom"
+                    value={newFeedbackFrom}
+                    onChange={(e) => setNewFeedbackFrom(e.target.value)}
+                    placeholder="Ej: Juan Pérez"
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="feedbackSeniority" className="text-sm">Seniority</Label>
+                  <Input
+                    id="feedbackSeniority"
+                    value={newFeedbackSeniority}
+                    onChange={(e) => setNewFeedbackSeniority(e.target.value)}
+                    placeholder="Ej: Senior Developer"
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="feedbackTeam" className="text-sm">Team</Label>
+                  <Input
+                    id="feedbackTeam"
+                    value={newFeedbackTeam}
+                    onChange={(e) => setNewFeedbackTeam(e.target.value)}
+                    placeholder="Ej: Engineering"
+                    className="h-9"
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="feedbackText" className="text-sm">Descripción (Markdown)</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1.5"
+                    onClick={() => setShowMarkdownPreview(!showMarkdownPreview)}
+                  >
+                    {showMarkdownPreview ? (
+                      <>
+                        <Edit className="h-3.5 w-3.5" />
+                        Editar
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="h-3.5 w-3.5" />
+                        Preview
+                      </>
+                    )}
+                  </Button>
+                </div>
+                
+                {showMarkdownPreview ? (
+                  <div className="min-h-[120px] p-3 rounded-md border bg-background markdown-content">
+                    {newFeedback.trim() ? (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                        {newFeedback}
+                      </ReactMarkdown>
+                    ) : (
+                      <p className="text-muted-foreground italic">Sin contenido...</p>
+                    )}
+                  </div>
+                ) : (
+                  <Textarea
+                    id="feedbackText"
+                    placeholder="Escribe el feedback usando markdown...&#10;&#10;**Negrita**, *cursiva*, [links](url)&#10;- Listas&#10;- Viñetas&#10;&#10;```code```"
+                    value={newFeedback}
+                    onChange={(e) => setNewFeedback(e.target.value)}
+                    className="min-h-[120px] text-sm font-mono"
+                  />
+                )}
+              </div>
+              
               <Button onClick={handleAddFeedback} className="gap-2 h-8" size="sm">
                 <Plus className="h-3.5 w-3.5" />
                 Agregar Feedback
@@ -478,25 +633,49 @@ export default function MemberDetailPage() {
                 {feedbacks.map(feedback => (
                   <div
                     key={feedback.id}
-                    className="p-3 rounded-md border bg-card group"
+                    className="p-4 rounded-md border bg-card group"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm whitespace-pre-wrap">{feedback.text}</p>
-                        <p className="text-xs text-muted-foreground mt-1.5">
-                          {new Date(feedback.createdAt).toLocaleDateString('es-ES', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </p>
+                      <div className="flex-1 min-w-0 space-y-2">
+                        {/* Metadata del feedback */}
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          {feedback.from && (
+                            <span className="font-medium text-foreground">
+                              De: {feedback.from}
+                            </span>
+                          )}
+                          {feedback.seniority && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
+                              {feedback.seniority}
+                            </Badge>
+                          )}
+                          {feedback.team && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
+                              {feedback.team}
+                            </Badge>
+                          )}
+                          <span className="ml-auto">
+                            {new Date(feedback.createdAt).toLocaleDateString('es-ES', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
+                        
+                        {/* Contenido del feedback en markdown */}
+                        <div className="markdown-content">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                            {feedback.text}
+                          </ReactMarkdown>
+                        </div>
                       </div>
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10 h-7 w-7 p-0"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10 h-7 w-7 p-0 shrink-0"
                         onClick={() => handleDeleteFeedback(feedback.id)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />

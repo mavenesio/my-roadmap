@@ -32,6 +32,9 @@ export interface Comment {
   id: string
   text: string
   createdAt: number
+  from?: string // Nombre de quien da el feedback
+  seniority?: string // Puesto/Seniority
+  team?: string // Equipo
 }
 
 export type GoalRating = "Below" | "Meet" | "Above"
@@ -63,6 +66,7 @@ export interface TeamMember {
   vacations?: Vacation[]
   comments?: Comment[]
   goals?: Goal[]
+  avatarUrl?: string // Avatar URL from Jira or other sources
 }
 
 export interface RoadmapConfig {
@@ -90,6 +94,8 @@ export interface RoadmapConfig {
 }
 
 const generateWeeks = (quarter: number, year: number): Week[] => {
+  console.log('🔧 generateWeeks called with:', { quarter, year, quarterType: typeof quarter, yearType: typeof year })
+  
   const quarters = {
     1: { startMonth: 0, endMonth: 2 }, // Enero-Marzo
     2: { startMonth: 3, endMonth: 5 }, // Abril-Junio
@@ -97,41 +103,54 @@ const generateWeeks = (quarter: number, year: number): Week[] => {
     4: { startMonth: 9, endMonth: 11 }, // Octubre-Diciembre
   }
   
+  if (!quarters[quarter as keyof typeof quarters]) {
+    throw new Error(`Quarter inválido: ${quarter}. Debe ser 1, 2, 3 o 4.`)
+  }
+  
   const { startMonth, endMonth } = quarters[quarter as keyof typeof quarters]
   const weeks: Week[] = []
   let globalWeekNumber = 1
   
-  for (let month = startMonth; month <= endMonth; month++) {
-    const firstDay = new Date(year, month, 1)
-    const lastDay = new Date(year, month + 1, 0)
+  const monthNames = [
+    "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+    "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"
+  ]
+  
+  // Primer día del trimestre
+  const quarterStart = new Date(year, startMonth, 1)
+  
+  // Encontrar el primer lunes del trimestre (o el lunes anterior si el trimestre no empieza en lunes)
+  const firstMonday = new Date(quarterStart)
+  const dayOfWeek = quarterStart.getDay()
+  const daysToMonday = dayOfWeek === 0 ? 1 : dayOfWeek === 1 ? 0 : 8 - dayOfWeek
+  firstMonday.setDate(quarterStart.getDate() + daysToMonday)
+  
+  // Último día del trimestre
+  const quarterEnd = new Date(year, endMonth + 1, 0)
+  
+  // Generar semanas continuas desde el primer lunes hasta cubrir todo el trimestre
+  let currentMonday = new Date(firstMonday)
+  
+  while (currentMonday <= quarterEnd) {
+    const weekEnd = new Date(currentMonday)
+    weekEnd.setDate(currentMonday.getDate() + 6) // Domingo de esa semana
     
-    // Encontrar el primer lunes del mes
-    const firstMonday = new Date(firstDay)
-    const dayOfWeek = firstDay.getDay()
-    const daysToMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek
-    firstMonday.setDate(firstDay.getDate() + daysToMonday)
+    // Determinar a qué mes pertenece la semana
+    // Usamos el criterio: el mes donde cae el lunes de la semana
+    const weekMonth = currentMonday.getMonth()
     
-    // Generar semanas desde el primer lunes hasta el final del mes
-    let currentWeek = new Date(firstMonday)
-    
-    while (currentWeek <= lastDay) {
-      const weekEnd = new Date(currentWeek)
-      weekEnd.setDate(currentWeek.getDate() + 6)
-      
-      const monthNames = [
-        "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
-        "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"
-      ]
-      
+    // Solo incluir la semana si el lunes está dentro del rango del trimestre o después
+    if (currentMonday >= quarterStart || weekEnd >= quarterStart) {
       weeks.push({
         id: `W${globalWeekNumber}`,
-        date: `${currentWeek.getDate().toString().padStart(2, '0')}-${(currentWeek.getMonth() + 1).toString().padStart(2, '0')}`,
-        month: monthNames[month]
+        date: `${currentMonday.getDate().toString().padStart(2, '0')}-${(currentMonday.getMonth() + 1).toString().padStart(2, '0')}`,
+        month: monthNames[weekMonth]
       })
-      
-      currentWeek.setDate(currentWeek.getDate() + 7)
       globalWeekNumber++
     }
+    
+    // Avanzar al siguiente lunes
+    currentMonday.setDate(currentMonday.getDate() + 7)
   }
   
   return weeks
@@ -157,12 +176,22 @@ export function useRoadmapConfig() {
     quarter: number,
     year: number,
     teamMembers?: TeamMember[],
-    projects?: string[]
-  ) => {
+    projects?: string[],
+    masterData?: {
+      tracks?: Array<{ name: string; color: string }>
+      priorities?: Array<{ name: string; color: string }>
+      statuses?: Array<{ name: string; color: string }>
+      types?: Array<{ name: string; color: string }>
+      sizes?: Array<{ name: string; color: string }>
+      defaults?: any
+    }
+  ): RoadmapConfig => {
     const weeks = generateWeeks(quarter, year)
     
-    // If projects are provided, create tracks from them; otherwise use default tracks
-    const tracks = projects && projects.length > 0
+    // If projects are provided, create tracks from them; otherwise use default tracks or provided tracks
+    const tracks = masterData?.tracks 
+      ? masterData.tracks
+      : projects && projects.length > 0
       ? projects.map((p, i) => ({
           name: p,
           color: DEFAULT_TRACKS[i % DEFAULT_TRACKS.length]?.color || generateColorFromName(p),
@@ -173,19 +202,22 @@ export function useRoadmapConfig() {
       quarter,
       year,
       weeks,
-      teamMembers: teamMembers && teamMembers.length > 0 ? teamMembers : DEFAULT_TEAM_MEMBERS,
-      projects: projects && projects.length > 0 ? projects : DEFAULT_TRACKS.map(t => t.name),
+      // Only use DEFAULT_TEAM_MEMBERS if teamMembers is undefined/null, not if it's empty array
+      // This allows users to have zero team members if they want
+      teamMembers: teamMembers !== undefined && teamMembers !== null ? teamMembers : DEFAULT_TEAM_MEMBERS,
+      projects: projects && projects.length > 0 ? projects : tracks.map(t => t.name),
       tracks,
-      priorities: DEFAULT_PRIORITIES,
-      statuses: DEFAULT_STATUSES,
-      types: DEFAULT_TYPES,
-      sizes: DEFAULT_SIZES,
-      defaults: DEFAULT_DEFAULTS,
+      priorities: masterData?.priorities || DEFAULT_PRIORITIES,
+      statuses: masterData?.statuses || DEFAULT_STATUSES,
+      types: masterData?.types || DEFAULT_TYPES,
+      sizes: masterData?.sizes || DEFAULT_SIZES,
+      defaults: masterData?.defaults || DEFAULT_DEFAULTS,
       createdAt: new Date().toISOString(),
       lastModified: new Date().toISOString()
     }
     setConfig(newConfig)
     setIsInitialized(true)
+    return newConfig
   }
 
   const updateConfig = (updates: Partial<RoadmapConfig>) => {
@@ -231,6 +263,104 @@ export function useRoadmapConfig() {
   const resetConfig = () => {
     removeConfig()
     setIsInitialized(false)
+  }
+
+  const addTeamMember = (member: TeamMember): boolean => {
+    if (!config) {
+      console.warn('⚠️ Cannot add team member: config not initialized')
+      return false
+    }
+    
+    // Check if member already exists (case-insensitive)
+    const exists = config.teamMembers.some(m => m.name.toLowerCase() === member.name.toLowerCase())
+    if (exists) {
+      console.warn(`⚠️ Team member "${member.name}" already exists`)
+      return false
+    }
+    
+    console.log(`➕ Adding team member: ${member.name}`)
+    
+    updateConfig({
+      teamMembers: [...config.teamMembers, member]
+    })
+    
+    return true
+  }
+
+  const addTeamMembers = (members: TeamMember[]): { added: number; skipped: number; errors: string[] } => {
+    if (!config) {
+      console.warn('⚠️ Cannot add team members: config not initialized')
+      return { added: 0, skipped: members.length, errors: ['Config not initialized'] }
+    }
+    
+    const currentNames = new Set(config.teamMembers.map(m => m.name.toLowerCase()))
+    const errors: string[] = []
+    
+    // Filter out duplicates
+    const uniqueMembers = members.filter(member => {
+      const nameLower = member.name.toLowerCase()
+      
+      if (currentNames.has(nameLower)) {
+        errors.push(`Duplicate: ${member.name}`)
+        return false
+      }
+      
+      // Add to set to prevent duplicates within the new members array
+      currentNames.add(nameLower)
+      return true
+    })
+    
+    const skipped = members.length - uniqueMembers.length
+    
+    if (skipped > 0) {
+      console.warn(`⚠️ Skipped ${skipped} duplicate team members`)
+    }
+    
+    if (uniqueMembers.length > 0) {
+      console.log(`➕ Adding ${uniqueMembers.length} team members`)
+      
+      updateConfig({
+        teamMembers: [...config.teamMembers, ...uniqueMembers]
+      })
+    }
+    
+    return { added: uniqueMembers.length, skipped, errors }
+  }
+
+  const updateTeamMember = (name: string, updates: Partial<TeamMember>): boolean => {
+    if (!config) {
+      console.warn('⚠️ Cannot update team member: config not initialized')
+      return false
+    }
+    
+    const exists = config.teamMembers.some(m => m.name === name)
+    if (!exists) {
+      console.warn(`⚠️ Team member "${name}" not found`)
+      return false
+    }
+    
+    console.log(`🔄 Updating team member: ${name}`)
+    
+    updateConfig({
+      teamMembers: config.teamMembers.map(m => 
+        m.name === name ? { ...m, ...updates } : m
+      )
+    })
+    
+    return true
+  }
+
+  const removeTeamMember = (name: string) => {
+    if (!config) return
+    
+    updateConfig({
+      teamMembers: config.teamMembers.filter(m => m.name !== name)
+    })
+  }
+
+  const getTeamMemberByName = (name: string): TeamMember | undefined => {
+    if (!config) return undefined
+    return config.teamMembers.find(m => m.name === name)
   }
 
   // Verificar si ya hay una configuración guardada
@@ -321,6 +451,11 @@ export function useRoadmapConfig() {
     updateConfig,
     importConfig,
     exportConfig,
-    resetConfig
+    resetConfig,
+    addTeamMember,
+    addTeamMembers,
+    updateTeamMember,
+    removeTeamMember,
+    getTeamMemberByName,
   }
 }

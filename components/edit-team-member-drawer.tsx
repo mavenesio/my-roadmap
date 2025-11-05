@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Save, MessageSquare, Trash2, Pencil, Check, X, Info, Briefcase } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -67,8 +68,8 @@ export function EditTeamMemberDrawer({
 }: EditTeamMemberDrawerProps) {
   const [name, setName] = useState(member?.name || "")
   const [color, setColor] = useState(member?.color || "#3b82f6")
-  const [nationality, setNationality] = useState(member?.nationality || "")
-  const [seniority, setSeniority] = useState(member?.seniority || "")
+  const [nationality, setNationality] = useState(member?.nationality || undefined)
+  const [seniority, setSeniority] = useState(member?.seniority || undefined)
   const [comments, setComments] = useState<Comment[]>(member?.comments || [])
   const [newComment, setNewComment] = useState("")
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
@@ -268,31 +269,44 @@ export function EditTeamMemberDrawer({
                       <Label htmlFor="nationality" className="text-base font-semibold">
                         Nacionalidad
                       </Label>
-                      <Input
-                        id="nationality"
-                        value={nationality}
-                        onChange={(e) => setNationality(e.target.value)}
-                        placeholder="Ej: Argentina"
-                        className="h-11 text-base"
-                      />
-                      {nationality && (
-                        <div className="flex items-center gap-2 text-2xl">
-                          {getFlagEmoji(nationality)}
-                        </div>
-                      )}
+                      <Select value={nationality || "none"} onValueChange={(val) => setNationality(val === "none" ? undefined : val)}>
+                        <SelectTrigger id="nationality" className="h-11 text-base">
+                          <SelectValue placeholder="Seleccionar nacionalidad..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sin especificar</SelectItem>
+                          <SelectItem value="Argentina">🇦🇷 Argentina</SelectItem>
+                          <SelectItem value="Colombia">🇨🇴 Colombia</SelectItem>
+                          <SelectItem value="Brasil">🇧🇷 Brasil</SelectItem>
+                          <SelectItem value="Chile">🇨🇱 Chile</SelectItem>
+                          <SelectItem value="México">🇲🇽 México</SelectItem>
+                          <SelectItem value="Uruguay">🇺🇾 Uruguay</SelectItem>
+                          <SelectItem value="Perú">🇵🇪 Perú</SelectItem>
+                          <SelectItem value="Venezuela">🇻🇪 Venezuela</SelectItem>
+                          <SelectItem value="España">🇪🇸 España</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="seniority" className="text-base font-semibold">
                         Seniority
                       </Label>
-                      <Input
-                        id="seniority"
-                        value={seniority}
-                        onChange={(e) => setSeniority(e.target.value)}
-                        placeholder="Ej: Senior"
-                        className="h-11 text-base"
-                      />
+                      <Select value={seniority || "none"} onValueChange={(val) => setSeniority(val === "none" ? undefined : val)}>
+                        <SelectTrigger id="seniority" className="h-11 text-base">
+                          <SelectValue placeholder="Seleccionar seniority..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sin especificar</SelectItem>
+                          <SelectItem value="Trainee">Trainee</SelectItem>
+                          <SelectItem value="Junior">Junior</SelectItem>
+                          <SelectItem value="Semi Senior">Semi Senior</SelectItem>
+                          <SelectItem value="Senior">Senior</SelectItem>
+                          <SelectItem value="Tech Lead">Tech Lead</SelectItem>
+                          <SelectItem value="Staff">Staff</SelectItem>
+                          <SelectItem value="Principal">Principal</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>

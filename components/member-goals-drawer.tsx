@@ -68,6 +68,7 @@ interface MemberGoalsDrawerProps {
   onSave: (member: TeamMember) => void
   tasks: Task[]
   tracks: Track[]
+  readOnly?: boolean // Modo solo lectura (sin edición)
 }
 
 export function MemberGoalsDrawer({ 
@@ -76,7 +77,8 @@ export function MemberGoalsDrawer({
   member, 
   onSave,
   tasks,
-  tracks
+  tracks,
+  readOnly = false
 }: MemberGoalsDrawerProps) {
   const [goals, setGoals] = useState<Goal[]>([])
   const [newGoalDescription, setNewGoalDescription] = useState("")
@@ -201,7 +203,7 @@ export function MemberGoalsDrawer({
     : 0
 
   return (
-    <Drawer open={open} onOpenChange={onClose} direction="right" dismissible={true} modal={true}>
+    <Drawer open={open} onOpenChange={onClose} direction="right" dismissible={false} modal={true}>
       <DrawerContent
         className="right-0 h-full w-[800px] overflow-hidden flex flex-col"
       >
@@ -219,7 +221,7 @@ export function MemberGoalsDrawer({
                 Objetivos de {member.name}
               </DrawerTitle>
               <DrawerDescription className="text-base mt-1">
-                Define y rastrea los objetivos por track
+                {readOnly ? 'Visualiza los objetivos por track' : 'Define y rastrea los objetivos por track'}
               </DrawerDescription>
               {totalGoalsCount > 0 && (
                 <div className="mt-3 flex items-center gap-3">
@@ -381,12 +383,13 @@ export function MemberGoalsDrawer({
                               <div className="flex items-start gap-3">
                                 <button
                                   type="button"
-                                  onClick={() => handleToggleGoal(goal.id)}
+                                  onClick={() => !readOnly && handleToggleGoal(goal.id)}
+                                  disabled={readOnly}
                                   className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
                                     goal.completed
                                       ? 'bg-green-500 border-green-500'
                                       : 'border-muted-foreground hover:border-green-500'
-                                  }`}
+                                  } ${readOnly ? 'cursor-default' : 'cursor-pointer'}`}
                                 >
                                   {goal.completed && (
                                     <Check className="h-3 w-3 text-white" />
@@ -415,26 +418,28 @@ export function MemberGoalsDrawer({
                                     )}
                                   </div>
                                 </div>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleStartEdit(goal)}
-                                    className="h-8 w-8 p-0"
-                                  >
-                                    <Pencil className="h-3 w-3" />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleDeleteGoal(goal.id)}
-                                    className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </div>
+                                {!readOnly && (
+                                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleStartEdit(goal)}
+                                      className="h-8 w-8 p-0"
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleDeleteGoal(goal.id)}
+                                      className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           )}
@@ -461,11 +466,12 @@ export function MemberGoalsDrawer({
           )}
 
           {/* Agregar nuevo objetivo */}
-          <div className="space-y-4 pt-6 border-t">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Plus className="h-5 w-5" />
-              Agregar Nuevo Objetivo
-            </h3>
+          {!readOnly && (
+            <div className="space-y-4 pt-6 border-t">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Plus className="h-5 w-5" />
+                Agregar Nuevo Objetivo
+              </h3>
 
             <div className="space-y-4">
               <div className="space-y-2">
@@ -577,7 +583,8 @@ export function MemberGoalsDrawer({
                 Agregar Objetivo
               </Button>
             </div>
-          </div>
+            </div>
+          )}
 
           {/* Información de tareas */}
           {memberTasks.length > 0 && (
@@ -598,18 +605,23 @@ export function MemberGoalsDrawer({
 
         <DrawerFooter className="border-t px-8 py-6 flex-shrink-0">
           <div className="flex gap-3">
-            <Button 
-              onClick={handleSave} 
-              className="flex-1 h-11 text-base gap-2"
-            >
-              <Check className="h-4 w-4" />
-              Guardar Cambios
-            </Button>
-            <DrawerClose asChild>
-              <Button type="button" variant="outline" className="flex-1 h-11 text-base">
-                Cancelar
+            {!readOnly && (
+              <Button 
+                onClick={handleSave} 
+                className="flex-1 h-11 text-base gap-2"
+              >
+                <Check className="h-4 w-4" />
+                Guardar Cambios
               </Button>
-            </DrawerClose>
+            )}
+            <Button 
+              type="button" 
+              variant="outline" 
+              className={`${readOnly ? 'w-full' : 'flex-1'} h-11 text-base`}
+              onClick={onClose}
+            >
+              {readOnly ? 'Cerrar' : 'Cancelar'}
+            </Button>
           </div>
         </DrawerFooter>
       </DrawerContent>

@@ -1,18 +1,18 @@
 "use client"
 
 import { useRoadmapConfig, type TeamMember as TeamMemberType } from "@/hooks/use-roadmap-config"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useLocalStorage } from "@/hooks/use-local-storage"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, UserPlus, Users, Pencil, Trash2, MessageSquare, Briefcase, Target, Edit2 } from "lucide-react"
+import { ArrowLeft, UserPlus, Users, Trash2, MessageSquare, Briefcase, Target } from "lucide-react"
 import { AddTeamMemberModal } from "@/components/add-team-member-modal"
-import { EditTeamMemberDrawer } from "@/components/edit-team-member-drawer"
 import { MemberGoalsDrawer } from "@/components/member-goals-drawer"
 import { VacationsTimeline } from "@/components/vacations-timeline"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 
 interface WeekAssignment {
@@ -31,12 +31,10 @@ interface Task {
 
 export default function TeamPage() {
   const router = useRouter()
-  const { config, updateConfig } = useRoadmapConfig()
-  const [members, setMembers] = useState<TeamMemberType[]>(config?.teamMembers || [])
+  const { config, addTeamMember, updateTeamMember, removeTeamMember } = useRoadmapConfig()
+  const members = useMemo(() => config?.teamMembers || [], [config?.teamMembers])
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false)
   const [isGoalsDrawerOpen, setIsGoalsDrawerOpen] = useState(false)
-  const [editingMember, setEditingMember] = useState<TeamMemberType | null>(null)
   const [selectedMemberForGoals, setSelectedMemberForGoals] = useState<TeamMemberType | null>(null)
   const [tasks] = useLocalStorage<Task[]>('roadmap-tasks', [])
   const [mounted, setMounted] = useState(false)
@@ -48,35 +46,32 @@ export default function TeamPage() {
   if (!mounted || !config) return null
 
   const handleAddMember = (member: TeamMemberType) => {
-    const updatedMembers = [...members, member]
-    setMembers(updatedMembers)
-    updateConfig({ teamMembers: updatedMembers })
+    const success = addTeamMember(member)
+    if (!success) {
+      toast.error("Error", {
+        description: `El miembro ${member.name} ya existe`,
+        duration: 3000,
+      })
+      return
+    }
     toast.success("Miembro agregado", {
       description: `${member.name} ha sido agregado al equipo`,
       duration: 3000,
     })
   }
 
-  const handleEditMember = (oldMember: TeamMemberType, newMember: TeamMemberType) => {
-    const updatedMembers = members.map(m => 
-      m.name === oldMember.name ? newMember : m
-    )
-    setMembers(updatedMembers)
-    updateConfig({ teamMembers: updatedMembers })
-    toast.success("Miembro actualizado", {
-      description: `Los datos de ${newMember.name} han sido actualizados`,
-      duration: 3000,
-    })
-    setIsEditDrawerOpen(false)
-    setEditingMember(null)
-  }
 
   const handleUpdateMemberGoals = (updatedMember: TeamMemberType) => {
-    const updatedMembers = members.map(m => 
-      m.name === updatedMember.name ? updatedMember : m
-    )
-    setMembers(updatedMembers)
-    updateConfig({ teamMembers: updatedMembers })
+    const success = updateTeamMember(updatedMember.name, {
+      goals: updatedMember.goals
+    })
+    if (!success) {
+      toast.error("Error", {
+        description: `No se pudo actualizar a ${updatedMember.name}`,
+        duration: 3000,
+      })
+      return
+    }
     toast.success("Objetivos actualizados", {
       description: `Los objetivos de ${updatedMember.name} han sido guardados`,
       duration: 3000,
@@ -88,9 +83,7 @@ export default function TeamPage() {
   const handleDeleteMember = (member: TeamMemberType) => {
     if (!confirm(`¿Estás seguro de eliminar a ${member.name} del equipo?`)) return
     
-    const updatedMembers = members.filter(m => m.name !== member.name)
-    setMembers(updatedMembers)
-    updateConfig({ teamMembers: updatedMembers })
+    removeTeamMember(member.name)
     toast.success("Miembro eliminado", {
       description: `${member.name} ha sido eliminado del equipo`,
       duration: 3000,
@@ -146,10 +139,7 @@ export default function TeamPage() {
           </div>
           <Button
             className="gap-2"
-            onClick={() => {
-              setEditingMember(null)
-              setIsAddModalOpen(true)
-            }}
+            onClick={() => setIsAddModalOpen(true)}
           >
             <UserPlus className="h-4 w-4" /> Agregar Miembro
           </Button>
@@ -180,10 +170,7 @@ export default function TeamPage() {
                   Comienza agregando tu primer colaborador
                 </p>
                 <Button
-                  onClick={() => {
-                    setEditingMember(null)
-                    setIsAddModalOpen(true)
-                  }}
+                  onClick={() => setIsAddModalOpen(true)}
                   className="gap-2"
                 >
                   <UserPlus className="h-4 w-4" /> Agregar Primer Miembro
@@ -217,17 +204,26 @@ export default function TeamPage() {
                       {/* Avatar y nombre */}
                       <div 
                         className="flex flex-col items-center text-center cursor-pointer mb-4"
-                        onClick={() => {
-                          setEditingMember(member)
-                          setIsEditDrawerOpen(true)
-                        }}
+                        onClick={() => router.push(`/team/${encodeURIComponent(member.name)}`)}
                       >
+                        {member.avatarUrl ? (
+                          <Avatar className="w-20 h-20 mb-3">
+                            <AvatarImage src={member.avatarUrl} alt={member.name} />
+                            <AvatarFallback 
+                              className="text-white font-semibold text-2xl"
+                              style={{ backgroundColor: member.color }}
+                      >
+                              {member.name.charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                        ) : (
                         <div
                           className="w-20 h-20 rounded-full flex items-center justify-center text-white font-semibold text-2xl mb-3"
                           style={{ backgroundColor: member.color }}
                         >
                           {member.name.charAt(0).toUpperCase()}
                         </div>
+                        )}
                         <div className="flex items-center gap-2 mb-1">
                           <h3 className="font-semibold text-lg">{member.name}</h3>
                           {member.nationality && (
@@ -275,7 +271,7 @@ export default function TeamPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="gap-2 flex-1"
+                          className="gap-2 w-full"
                           onClick={(e) => {
                             e.stopPropagation()
                             setSelectedMemberForGoals(member)
@@ -284,18 +280,6 @@ export default function TeamPage() {
                         >
                           <Target className="h-4 w-4" />
                           Goals
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-2 flex-1"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            router.push(`/team/${encodeURIComponent(member.name)}`)
-                          }}
-                        >
-                          <Edit2 className="h-4 w-4" />
-                          Ver
                         </Button>
                       </div>
                     </div>
@@ -310,11 +294,9 @@ export default function TeamPage() {
         <VacationsTimeline 
           members={members}
           onUpdateMember={(updatedMember) => {
-            const updatedMembers = members.map(m => 
-              m.name === updatedMember.name ? updatedMember : m
-            )
-            setMembers(updatedMembers)
-            updateConfig({ teamMembers: updatedMembers })
+            updateTeamMember(updatedMember.name, {
+              vacations: updatedMember.vacations
+            })
           }}
         />
       </div>
@@ -322,34 +304,13 @@ export default function TeamPage() {
       {/* Add Member Modal */}
       <AddTeamMemberModal
         open={isAddModalOpen}
-        onClose={() => {
-          setIsAddModalOpen(false)
-          setEditingMember(null)
-        }}
+        onClose={() => setIsAddModalOpen(false)}
         onSave={(member: TeamMemberType) => {
           handleAddMember(member)
           setIsAddModalOpen(false)
-          setEditingMember(null)
         }}
         editingMember={null}
         existingMembers={members}
-      />
-
-      {/* Edit Member Drawer */}
-      <EditTeamMemberDrawer
-        open={isEditDrawerOpen}
-        member={editingMember}
-        onClose={() => {
-          setIsEditDrawerOpen(false)
-          setEditingMember(null)
-        }}
-        onSave={(updatedMember: TeamMemberType) => {
-          if (editingMember) {
-            handleEditMember(editingMember, updatedMember)
-          }
-        }}
-        direction="left"
-        tasks={tasks}
       />
 
       {/* Member Goals Drawer */}
@@ -363,6 +324,7 @@ export default function TeamPage() {
         onSave={handleUpdateMemberGoals}
         tasks={tasks}
         tracks={config.tracks}
+        readOnly={true}
       />
     </div>
   )

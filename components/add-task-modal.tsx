@@ -93,9 +93,8 @@ export function AddTaskModal({ config, onAddTask }: AddTaskModalProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="gap-2">
+        <Button variant="outline" size="icon" className="bg-white dark:bg-slate-950">
           <Plus className="h-4 w-4" />
-          Add Task
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[700px]">
