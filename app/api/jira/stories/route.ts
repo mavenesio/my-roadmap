@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getJiraCredentialsFromCookie } from '@/lib/server-auth'
 
 export async function POST(request: NextRequest) {
   try {
-    const { domain, epicKey, email, token } = await request.json()
+    const { domain, epicKey } = await request.json()
 
-    if (!domain || !epicKey || !email || !token) {
+    if (!domain || !epicKey) {
       return NextResponse.json(
-        { error: 'Faltan parámetros requeridos' },
+        { error: 'Faltan parámetros requeridos: domain y epicKey' },
         { status: 400 }
+      )
+    }
+
+    // Get credentials from httpOnly cookie
+    const { email, token } = await getJiraCredentialsFromCookie()
+
+    if (!email || !token) {
+      return NextResponse.json(
+        { error: 'No hay credenciales guardadas. Por favor, configura tus credenciales de Jira primero.' },
+        { status: 401 }
       )
     }
 

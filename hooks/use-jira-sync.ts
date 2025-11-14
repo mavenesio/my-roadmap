@@ -11,6 +11,17 @@ import {
   type JiraStory,
   type JiraUser,
 } from '@/lib/jira-client'
+import {
+  getSavedEmail,
+  getSavedBoards,
+  saveBoards,
+  addBoard as addBoardToStorage,
+  removeBoard as removeBoardFromStorage,
+  getBoardById as getBoardByIdFromStorage,
+  hasValidToken,
+  type JiraBoard,
+  type SavedJiraBoards,
+} from '@/lib/credentials-manager'
 
 export interface JiraCredentials {
   boardUrl: string
@@ -23,17 +34,6 @@ export interface SavedJiraCredentials {
   boardUrl: string
   email: string
   token: string
-}
-
-export interface JiraBoard {
-  id: string
-  name: string
-  url: string
-}
-
-export interface SavedJiraBoards {
-  email: string
-  boards: JiraBoard[]
 }
 
 export interface JiraUserMapping {
@@ -50,54 +50,52 @@ export interface SyncProgress {
 }
 
 export function useJiraSync() {
-  const [savedCredentials, setSavedCredentials] = useLocalStorage<SavedJiraCredentials | null>('jira-credentials', null)
-  const [savedBoards, setSavedBoards] = useLocalStorage<SavedJiraBoards>('jira-boards', { email: '', boards: [] })
+  // User mappings still stored in localStorage (not sensitive data)
   const [userMappings, setUserMappings] = useLocalStorage<JiraUserMapping[]>('jira-user-mappings', [])
   
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<SyncProgress | null>(null)
 
-  const saveCredentials = useCallback((credentials: SavedJiraCredentials | null) => {
-    setSavedCredentials(credentials)
-  }, [setSavedCredentials])
+  // Get saved credentials (from cookies + localStorage)
+  const getCredentials = useCallback(async () => {
+    const email = getSavedEmail()
+    const hasToken = await hasValidToken()
+    
+    if (!email || !hasToken) {
+      return null
+    }
+    
+    return {
+      email,
+      hasToken,
+    }
+  }, [])
 
-  const getCredentials = useCallback(() => {
-    return savedCredentials
-  }, [savedCredentials])
-
-  // Backwards compatibility: getToken
-  const getToken = useCallback(() => {
-    return savedCredentials?.token || null
-  }, [savedCredentials])
+  // Legacy: getToken - now checks if token exists in cookie
+  const getToken = useCallback(async () => {
+    const hasToken = await hasValidToken()
+    return hasToken ? 'exists' : null
+  }, [])
   
-  // New: Boards management
+  // Boards Management
   const addBoard = useCallback((board: JiraBoard, email: string) => {
-    setSavedBoards(prev => {
-      // Remove any existing board with the same URL
-      const filtered = prev.boards.filter(b => b.url !== board.url)
-      return {
-        email,
-        boards: [...filtered, board]
-      }
-    })
-  }, [setSavedBoards])
+    addBoardToStorage(board, email)
+  }, [])
   
-  const getBoards = useCallback(() => {
-    return savedBoards
-  }, [savedBoards])
+  const getBoards = useCallback((): SavedJiraBoards => {
+    return getSavedBoards()
+  }, [])
   
   const getBoardById = useCallback((id: string): JiraBoard | undefined => {
-    return savedBoards.boards.find(b => b.id === id)
-  }, [savedBoards])
+    return getBoardByIdFromStorage(id)
+  }, [])
   
   const removeBoard = useCallback((id: string) => {
-    setSavedBoards(prev => ({
-      ...prev,
-      boards: prev.boards.filter(b => b.id !== id)
-    }))
-  }, [setSavedBoards])
+    removeBoardFromStorage(id)
+  }, [])
 
+  // User Mappings
   const addUserMapping = useCallback((mapping: JiraUserMapping) => {
     setUserMappings(prev => {
       // Remove any existing mapping for this Jira user
@@ -124,25 +122,14 @@ export function useJiraSync() {
     return jiraUsers.filter(user => !mappedIds.has(user.accountId))
   }, [userMappings])
 
-  // Step 1: Fetch only epics
-  const fetchEpicsOnly = useCallback(async (credentials: JiraCredentials) => {
+  // Fetch only epics (credentials read from cookies)
+  const fetchEpicsOnly = useCallback(async (boardUrl: string) => {
     setIsLoading(true)
     setError(null)
     setProgress({ current: 20, total: 100, message: 'Obteniendo épicas...' })
 
     try {
-      // Save credentials if requested
-      if (credentials.rememberToken) {
-        saveCredentials({
-          boardUrl: credentials.boardUrl,
-          email: credentials.email,
-          token: credentials.token,
-        })
-      } else {
-        saveCredentials(null)
-      }
-
-      const epics = await fetchEpicsFromBoard(credentials.boardUrl, credentials.email, credentials.token)
+      const epics = await fetchEpicsFromBoard(boardUrl)
       
       setProgress({ current: 100, total: 100, message: 'Épicas obtenidas' })
       setIsLoading(false)
@@ -155,19 +142,19 @@ export function useJiraSync() {
       setProgress(null)
       throw err
     }
-  }, [saveCredentials])
+  }, [])
 
-  // Step 2: Fetch stories for selected epics
+  // Fetch stories for selected epics (credentials read from cookies)
   const fetchStoriesForSelectedEpics = useCallback(async (
     selectedEpics: JiraEpic[],
-    credentials: JiraCredentials
+    boardUrl: string
   ) => {
     setIsLoading(true)
     setError(null)
     setProgress({ current: 0, total: 100, message: 'Obteniendo stories...' })
 
     try {
-      const { domain } = parseJiraBoardUrl(credentials.boardUrl)
+      const { domain } = parseJiraBoardUrl(boardUrl)
       const allStories: { epicKey: string; stories: JiraStory[] }[] = []
 
       for (let i = 0; i < selectedEpics.length; i++) {
@@ -178,7 +165,7 @@ export function useJiraSync() {
           message: `Obteniendo stories de ${epic.key}... (${i + 1}/${selectedEpics.length})`,
         })
 
-        const stories = await fetchStoriesFromEpic(epic.key, domain, credentials.email, credentials.token)
+        const stories = await fetchStoriesFromEpic(epic.key, domain)
         allStories.push({ epicKey: epic.key, stories })
 
         // Small delay to avoid rate limiting
@@ -197,12 +184,12 @@ export function useJiraSync() {
     }
   }, [])
 
-  // Step 3: Fetch users
-  const fetchUsersOnly = useCallback(async (credentials: JiraCredentials) => {
+  // Fetch users (credentials read from cookies)
+  const fetchUsersOnly = useCallback(async (boardUrl: string) => {
     setProgress({ current: 80, total: 100, message: 'Obteniendo usuarios...' })
 
     try {
-      const users = await fetchJiraUsers(credentials.boardUrl, credentials.email, credentials.token)
+      const users = await fetchJiraUsers(boardUrl)
       
       setProgress({ current: 100, total: 100, message: 'Sincronización completada' })
       setIsLoading(false)
@@ -218,8 +205,9 @@ export function useJiraSync() {
   }, [])
 
   // Legacy: Complete sync (for backwards compatibility)
+  // Note: Credentials must be saved in cookies before calling this
   const syncFromJira = useCallback(async (
-    credentials: JiraCredentials,
+    boardUrl: string,
     onEpicsLoaded?: (epics: JiraEpic[]) => void,
     onStoriesLoaded?: (epicKey: string, stories: JiraStory[]) => void,
     onUsersLoaded?: (users: JiraUser[]) => void,
@@ -229,22 +217,11 @@ export function useJiraSync() {
     setProgress({ current: 0, total: 100, message: 'Iniciando sincronización...' })
 
     try {
-      const { domain } = parseJiraBoardUrl(credentials.boardUrl)
-
-      // Save credentials if requested
-      if (credentials.rememberToken) {
-        saveCredentials({
-          boardUrl: credentials.boardUrl,
-          email: credentials.email,
-          token: credentials.token,
-        })
-      } else {
-        saveCredentials(null)
-      }
+      const { domain } = parseJiraBoardUrl(boardUrl)
 
       // Step 1: Fetch epics
       setProgress({ current: 10, total: 100, message: 'Obteniendo épicas...' })
-      const epics = await fetchEpicsFromBoard(credentials.boardUrl, credentials.email, credentials.token)
+      const epics = await fetchEpicsFromBoard(boardUrl)
       
       if (onEpicsLoaded) {
         onEpicsLoaded(epics)
@@ -260,7 +237,7 @@ export function useJiraSync() {
           message: `Obteniendo stories de ${epic.key}... (${i + 1}/${epics.length})`,
         })
 
-        const stories = await fetchStoriesFromEpic(epic.key, domain, credentials.email, credentials.token)
+        const stories = await fetchStoriesFromEpic(epic.key, domain)
         allStories.push({ epicKey: epic.key, stories })
         
         if (onStoriesLoaded) {
@@ -273,7 +250,7 @@ export function useJiraSync() {
 
       // Step 3: Fetch users
       setProgress({ current: 80, total: 100, message: 'Obteniendo usuarios...' })
-      const users = await fetchJiraUsers(credentials.boardUrl, credentials.email, credentials.token)
+      const users = await fetchJiraUsers(boardUrl)
       
       if (onUsersLoaded) {
         onUsersLoaded(users)
@@ -290,7 +267,7 @@ export function useJiraSync() {
       setProgress(null)
       throw err
     }
-  }, [saveCredentials])
+  }, [])
 
   const clearError = useCallback(() => {
     setError(null)
@@ -301,10 +278,8 @@ export function useJiraSync() {
     isLoading,
     error,
     progress,
-    savedCredentials,
-    savedToken: savedCredentials?.token || null, // Backwards compatibility
+    savedBoards: getBoards(),
     userMappings,
-    savedBoards,
     
     // Actions - New Flow
     fetchEpicsOnly,
@@ -314,10 +289,9 @@ export function useJiraSync() {
     // Actions - Legacy
     syncFromJira,
     
-    // Credentials
-    saveCredentials,
+    // Credentials (now async because they check cookies)
     getCredentials,
-    getToken, // Backwards compatibility
+    getToken, // Returns 'exists' or null
     
     // Boards Management
     addBoard,
@@ -335,4 +309,3 @@ export function useJiraSync() {
     clearError,
   }
 }
-

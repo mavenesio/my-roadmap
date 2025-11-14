@@ -20,11 +20,12 @@ import { useJiraSync } from "@/hooks/use-jira-sync"
 import { JiraSyncModal } from "./jira-sync-modal"
 import { JiraUserMappingModal } from "./jira-user-mapping-modal"
 import { JiraEpicsReviewModal } from "./jira-epics-review-modal"
-import { TokenRequestModal } from "./token-request-modal"
+import { JiraCredentialsModal } from "./jira-credentials-modal"
 import { InitializationWizard } from "./initialization-wizard"
+import { hasValidToken, getSavedEmail } from "@/lib/credentials-manager"
 import type { JiraEpic, JiraStory, JiraUser } from "@/lib/jira-client"
 import { parseJiraBoardUrl } from "@/lib/jira-client"
-import { Download, Upload, X, ChevronDown, ChevronRight, GripVertical, Pin, PinOff, MessageSquare, Edit2, Users, ListTodo, Link as LinkIcon, RefreshCw, Settings2 } from "lucide-react"
+import { Download, Upload, X, ChevronDown, ChevronRight, GripVertical, Pin, PinOff, MessageSquare, Edit2, Users, ListTodo, Link as LinkIcon, RefreshCw, Settings2, ExternalLink } from "lucide-react"
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, DragEndEvent } from "@dnd-kit/core"
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
@@ -109,7 +110,10 @@ interface Task {
   comments?: Comment[]
   jiraEpicKey?: string
   jiraEpicId?: string
+  jiraEpicUrl?: string
   jiraSubtasks?: JiraSubtask[]
+  jiraBoardId?: string
+  jiraBoardName?: string
 }
 
 const INITIAL_TASKS: Task[] = []
@@ -166,8 +170,8 @@ export function RoadmapGantt() {
   const [showJiraSyncModal, setShowJiraSyncModal] = useState(false)
   const [showUserMappingModal, setShowUserMappingModal] = useState(false)
   const [showEpicsReviewModal, setShowEpicsReviewModal] = useState(false)
-  const [showTokenRequestModal, setShowTokenRequestModal] = useState(false)
-  const [tokenRequestResolver, setTokenRequestResolver] = useState<((value: { token: string; rememberToken: boolean } | null) => void) | null>(null)
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false)
+  const [credentialsResolver, setCredentialsResolver] = useState<((success: boolean) => void) | null>(null)
   const [jiraUsers, setJiraUsers] = useState<JiraUser[]>([])
   const [pendingJiraData, setPendingJiraData] = useState<{
     epics: JiraEpic[]
@@ -497,7 +501,7 @@ export function RoadmapGantt() {
     rememberToken: boolean
   } | null>(null)
 
-  const handleRefreshExistingEpics = async (boardUrl: string, email: string, token: string) => {
+  const handleRefreshExistingEpics = async (boardUrl: string) => {
     if (!config) return
 
     try {
@@ -513,9 +517,9 @@ export function RoadmapGantt() {
 
       console.log(`📋 Found ${jiraTasks.length} Jira-linked tasks to update`)
       
-      // Fetch all epics from the board
+      // Fetch all epics from the board (credentials read from cookies)
       const { domain } = parseJiraBoardUrl(boardUrl)
-      const allEpics = await jiraSync.fetchEpicsOnly({ boardUrl, email, token, rememberToken: false })
+      const allEpics = await jiraSync.fetchEpicsOnly(boardUrl)
       
       if (!allEpics || allEpics.length === 0) {
         alert('No se encontraron épicas en Jira')
@@ -535,18 +539,25 @@ export function RoadmapGantt() {
           continue
         }
 
-        // Fetch stories for this epic
-        const storiesResult = await jiraSync.fetchStoriesForSelectedEpics([jiraEpic], { boardUrl, email, token, rememberToken: false })
+        // Fetch stories for this epic (credentials read from cookies)
+        const storiesResult = await jiraSync.fetchStoriesForSelectedEpics([jiraEpic], boardUrl)
         const epicStories = storiesResult.find(s => s.epicKey === jiraEpic.key)?.stories || []
 
         // Convert stories to subtasks
         const jiraSubtasks = epicStories.map((story: any) => ({
+          id: story.id,
           key: story.key,
-          summary: story.summary,
+          title: story.summary,
           status: story.status,
-          assignee: story.assignee?.displayName || undefined,
-          created: story.created,
-          updated: story.updated,
+          assignee: story.assignee ? {
+            id: story.assignee.accountId,
+            displayName: story.assignee.displayName,
+            avatarUrl: story.assignee.avatarUrls?.['48x48'] || '',
+          } : undefined,
+          startDate: story.startDate,
+          endDate: story.dueDate,
+          createdAt: story.created,
+          updatedAt: story.updated,
           description: story.description || undefined,
         }))
 
@@ -586,15 +597,15 @@ export function RoadmapGantt() {
     }
   }
 
-  const handleJiraSync = async (boardUrl: string, email: string, token: string, rememberToken: boolean) => {
+  const handleJiraSync = async (boardUrl: string) => {
     if (!config) return
 
     try {
-      // Store credentials for later use
-      setCurrentJiraCredentials({ boardUrl, email, token, rememberToken })
+      // Store board URL for later use
+      setCurrentJiraCredentials({ boardUrl, email: '', token: '', rememberToken: false })
 
-      // Step 1: Fetch only epics
-      const epics = await jiraSync.fetchEpicsOnly({ boardUrl, email, token, rememberToken })
+      // Step 1: Fetch only epics (credentials read from cookies)
+      const epics = await jiraSync.fetchEpicsOnly(boardUrl)
 
       if (epics && epics.length > 0) {
         const { domain } = parseJiraBoardUrl(boardUrl)
@@ -837,17 +848,18 @@ export function RoadmapGantt() {
       const selectedEpics = pendingJiraData.epics.filter(epic => selectedEpicKeys.includes(epic.key))
       console.log('✅ Selected epics:', selectedEpics.length)
 
-      // Step 2: Fetch stories for selected epics
+      // Step 2: Fetch stories for selected epics (credentials read from cookies)
       console.log('📚 Fetching stories for selected epics...')
+      const boardUrl = currentJiraCredentials?.boardUrl || ''
       const allStories = await jiraSync.fetchStoriesForSelectedEpics(
         selectedEpics,
-        currentJiraCredentials
+        boardUrl
       )
       console.log('✅ Stories fetched:', allStories.length)
 
-      // Step 3: Fetch users
+      // Step 3: Fetch users (credentials read from cookies)
       console.log('👥 Fetching users...')
-      const users = await jiraSync.fetchUsersOnly(currentJiraCredentials)
+      const users = await jiraSync.fetchUsersOnly(boardUrl)
       console.log('✅ Users fetched:', users.length)
       setJiraUsers(users)
 
@@ -891,51 +903,120 @@ export function RoadmapGantt() {
     }
   }
 
-  // Helper function to request Jira token with remember option
-  const requestJiraToken = (): Promise<{ token: string; rememberToken: boolean } | null> => {
+  // Helper function to request Jira credentials
+  const requestJiraCredentials = (): Promise<boolean> => {
     return new Promise((resolve) => {
-      setTokenRequestResolver(() => resolve)
-      setShowTokenRequestModal(true)
+      setCredentialsResolver(() => resolve)
+      setShowCredentialsModal(true)
     })
   }
 
-  const handleTokenRequest = (token: string, rememberToken: boolean) => {
-    if (tokenRequestResolver) {
-      tokenRequestResolver({ token, rememberToken })
-      setTokenRequestResolver(null)
+  const handleCredentialsSuccess = () => {
+    if (credentialsResolver) {
+      credentialsResolver(true)
+      setCredentialsResolver(null)
     }
-    setShowTokenRequestModal(false)
+    setShowCredentialsModal(false)
   }
 
-  const handleTokenRequestCancel = () => {
-    if (tokenRequestResolver) {
-      tokenRequestResolver(null)
-      setTokenRequestResolver(null)
+  const handleCredentialsCancel = () => {
+    if (credentialsResolver) {
+      credentialsResolver(false)
+      setCredentialsResolver(null)
     }
-    setShowTokenRequestModal(false)
+    setShowCredentialsModal(false)
   }
 
-  const handleSyncTaskFromJira = async (taskId: string, jiraEpicKey: string) => {
-    // Get saved credentials
-    const savedCredentials = jiraSync.getCredentials()
-    const savedBoards = jiraSync.getBoards()
-    const savedEmail = savedBoards.email
-
-    // Validate we have saved email
-    if (!savedEmail) {
-      alert('⚠️ No hay email de Jira configurado. Por favor, configura Jira en Settings.')
+  const handleCreateInJira = async (taskId: string) => {
+    const task = getTaskById(taskId)
+    if (!task) {
+      alert('❌ Tarea no encontrada')
       return
     }
 
-    let token = savedCredentials?.token || ''
-    let shouldSaveToken = false
+    // Check if we have credentials
+    const email = getSavedEmail()
+    const hasToken = await hasValidToken()
 
-    // If no token saved, open the token request dialog
-    if (!token) {
-      const result = await requestJiraToken()
-      if (!result) return // User cancelled
-      token = result.token
-      shouldSaveToken = result.rememberToken
+    if (!email || !hasToken) {
+      const success = await requestJiraCredentials()
+      if (!success) return
+    }
+
+    // Get saved boards to determine project key
+    const savedBoards = jiraSync.getBoards()
+    if (!savedBoards.boards || savedBoards.boards.length === 0) {
+      alert('⚠️ No hay boards configurados. Por favor, configura un board de Jira en Settings.')
+      return
+    }
+
+    // Use the first board's project key (or could show a selector)
+    const projectKey = savedBoards.boards[0].projectKey
+
+    console.log('🚀 Creating epic in Jira...', { 
+      taskId, 
+      projectKey, 
+      taskName: task.name,
+      board: savedBoards.boards[0]
+    })
+
+    // Validate we have all required data
+    if (!projectKey) {
+      alert('⚠️ El board configurado no tiene un Project Key válido. Por favor, reconfigura el board en Settings.')
+      return
+    }
+
+    if (!task.name || task.name.trim() === '') {
+      alert('⚠️ La tarea debe tener un nombre válido.')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/jira/create-epic', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          projectKey: projectKey,
+          summary: task.name.trim(),
+          description: `Épica creada desde el roadmap`,
+        }),
+      })
+
+      console.log('📥 Create epic response:', response.status, response.statusText)
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Error al crear épica')
+      }
+
+      const data = await response.json()
+      console.log('✅ Epic created:', data.epic)
+
+      // Update task with Jira information
+      updateTask(taskId, {
+        jiraEpicKey: data.epic.key,
+        jiraEpicId: data.epic.id,
+        jiraEpicUrl: data.epic.url,
+      })
+
+      alert(`✅ Épica creada en Jira: ${data.epic.key}`)
+    } catch (error) {
+      console.error('❌ Error creating epic in Jira:', error)
+      alert(`❌ Error al crear épica en Jira: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    }
+  }
+
+  const handleSyncTaskFromJira = async (taskId: string, jiraEpicKey: string) => {
+    // Check if we have credentials
+    const email = getSavedEmail()
+    const hasToken = await hasValidToken()
+
+    // If no credentials, request them
+    if (!email || !hasToken) {
+      const success = await requestJiraCredentials()
+      if (!success) return // User cancelled
     }
 
     const currentTask = getTaskById(taskId)
@@ -955,34 +1036,19 @@ export function RoadmapGantt() {
       }
     }
 
-    // If no domain from task, try to get from first saved board
-    if (!domain && savedBoards.boards.length > 0) {
-      try {
-        const url = new URL(savedBoards.boards[0].url)
-        domain = `${url.protocol}//${url.host}`
-      } catch (err) {
-        console.error('Error parsing board URL:', err)
-      }
-    }
-
-    // If still no domain, we can't proceed
+    // If no domain from task, use configured Jira domain
     if (!domain) {
-      alert('❌ No se pudo determinar el dominio de Jira. Por favor configura un board en Settings.')
-      return
+      const { getJiraDomain } = await import('@/lib/credentials-manager')
+      domain = getJiraDomain()
     }
 
     try {
-      // Save token if requested
-      if (shouldSaveToken) {
-        jiraSync.saveCredentials({ boardUrl: '', email: savedEmail, token })
-      }
-
       // Add loading state
       updateTask(taskId, { name: `${currentTask.name} (Actualizando...)` })
 
-      // Fetch updated epic data
+      // Fetch updated epic data (credentials read from cookies)
       const { fetchStoriesFromEpic } = await import('@/lib/jira-client')
-      const stories = await fetchStoriesFromEpic(jiraEpicKey, domain, savedEmail, token)
+      const stories = await fetchStoriesFromEpic(jiraEpicKey, domain)
 
       // Update the task with new subtasks
       const jiraSubtasks: JiraSubtask[] = stories.map(story => ({
@@ -1350,6 +1416,24 @@ export function RoadmapGantt() {
                       {task.comments.length}
                     </Badge>
                   )}
+                  {task.jiraEpicKey && task.jiraEpicUrl && (
+                    <a
+                      href={task.jiraEpicUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex"
+                    >
+                      <Badge 
+                        className="text-white text-[10px] px-2 py-1 h-6 flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
+                        style={{ backgroundColor: '#0052CC' }}
+                      >
+                        <LinkIcon className="h-3 w-3" />
+                        {task.jiraEpicKey}
+                        <ExternalLink className="h-2.5 w-2.5" />
+                      </Badge>
+                    </a>
+                  )}
                 </div>
               </div>
             </TooltipTrigger>
@@ -1589,7 +1673,7 @@ export function RoadmapGantt() {
         throw new Error(`Año inválido: ${wizardData.year}`)
       }
       
-      // Save Jira boards, email and token from wizard
+      // Save Jira boards from wizard
       if (wizardData.jiraBoards && wizardData.jiraBoards.length > 0) {
         console.log(`💾 Saving ${wizardData.jiraBoards.length} Jira boards from wizard`)
         const firstBoard = wizardData.jiraBoards[0]
@@ -1598,29 +1682,27 @@ export function RoadmapGantt() {
         // Save each board
         wizardData.jiraBoards.forEach((boardData: any) => {
           try {
-            const url = new URL(boardData.boardUrl)
-            const boardMatch = url.pathname.match(/\/boards\/(\d+)/)
-            const boardId = boardMatch ? boardMatch[1] : Date.now().toString()
-            const projectMatch = url.pathname.match(/\/projects\/([A-Z0-9]+)/)
-            const projectName = projectMatch ? projectMatch[1] : 'Board'
+            // Extract project key from boardUrl or use projectKey directly
+            let projectKey = boardData.projectKey
+            if (!projectKey && boardData.boardUrl) {
+              const { extractProjectKeyFromUrl } = require('@/lib/credentials-manager')
+              projectKey = extractProjectKeyFromUrl(boardData.boardUrl)
+            }
+            
+            if (!projectKey) {
+              console.error('  ❌ No project key found for board')
+              return
+            }
+            
+            const projectName = boardData.projectKey || projectKey
             
             jiraSync.addBoard({
-              id: boardId,
+              id: projectKey,
               name: projectName,
-              url: boardData.boardUrl
+              projectKey: projectKey,
             }, email)
             
-            console.log(`  ✅ Saved board: ${projectName} (${boardId})`)
-            
-            // Save credentials if user requested to save token
-            if (boardData.saveToken && boardData.token) {
-              jiraSync.saveCredentials({
-                boardUrl: boardData.boardUrl,
-                email: email,
-                token: boardData.token
-              })
-              console.log(`  🔐 Saved credentials (with token)`)
-            }
+            console.log(`  ✅ Saved board: ${projectName}`)
           } catch (err) {
             console.error('  ❌ Error saving board:', err)
           }
@@ -2316,6 +2398,7 @@ export function RoadmapGantt() {
             setIsEditOpen(false)
           }}
           onSyncFromJira={handleSyncTaskFromJira}
+          onCreateInJira={handleCreateInJira}
           config={config}
         />
       )}
@@ -2335,7 +2418,6 @@ export function RoadmapGantt() {
         }}
         onSync={handleJiraSync}
         onRefreshExisting={handleRefreshExistingEpics}
-        savedCredentials={jiraSync.savedCredentials}
         savedBoards={jiraSync.savedBoards}
         hasExistingEpics={tasks.some(task => task.jiraEpicKey)}
         isLoading={jiraSync.isLoading}
@@ -2345,11 +2427,14 @@ export function RoadmapGantt() {
         onRemoveBoard={jiraSync.removeBoard}
       />
 
-      {/* Token Request Modal */}
-      <TokenRequestModal
-        open={showTokenRequestModal}
-        onSubmit={handleTokenRequest}
-        onCancel={handleTokenRequestCancel}
+      {/* Jira Credentials Modal */}
+      <JiraCredentialsModal
+        open={showCredentialsModal}
+        onClose={handleCredentialsCancel}
+        onSuccess={handleCredentialsSuccess}
+        requireProjectKey={false}
+        title="Credenciales Requeridas"
+        description="Por favor, ingresa tus credenciales de Jira para continuar"
       />
 
       {/* Jira User Mapping Modal */}

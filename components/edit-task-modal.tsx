@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RoadmapConfig } from "@/hooks/use-roadmap-config"
-import { Edit3, Save, MessageSquare, Trash2, Pencil, Check, X, Info, Clock, RefreshCw, ExternalLink } from "lucide-react"
+import { Edit3, Save, MessageSquare, Trash2, Pencil, Check, X, Info, Clock, RefreshCw, ExternalLink, Plus } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { JiraSubtasksSection } from "./jira-subtasks-section"
@@ -86,11 +86,12 @@ interface EditTaskModalProps {
     comments?: Comment[]
   }) => void
   onSyncFromJira?: (taskId: string, jiraEpicKey: string) => Promise<void>
+  onCreateInJira?: (taskId: string) => Promise<void>
   config: RoadmapConfig
   direction?: "left" | "right"
 }
 
-export function EditTaskModal({ open, onClose, task, onSave, onSyncFromJira, config, direction = "left" }: EditTaskModalProps) {
+export function EditTaskModal({ open, onClose, task, onSave, onSyncFromJira, onCreateInJira, config, direction = "left" }: EditTaskModalProps) {
   const [name, setName] = useState(task.name)
   const [priority, setPriority] = useState<Priority>(task.priority)
   const [track, setTrack] = useState<Track>(task.track)
@@ -103,6 +104,7 @@ export function EditTaskModal({ open, onClose, task, onSave, onSyncFromJira, con
   const [editingCommentText, setEditingCommentText] = useState("")
   const [showMarkdownHelp, setShowMarkdownHelp] = useState(false)
   const [isSyncingFromJira, setIsSyncingFromJira] = useState(false)
+  const [isCreatingInJira, setIsCreatingInJira] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const commentsEndRef = useRef<HTMLDivElement>(null)
 
@@ -193,6 +195,22 @@ export function EditTaskModal({ open, onClose, task, onSave, onSyncFromJira, con
     }
   }
 
+  const handleCreateInJira = async () => {
+    if (!onCreateInJira) return
+    
+    setIsCreatingInJira(true)
+    try {
+      await onCreateInJira(task.id)
+      // Close modal after successful creation
+      onClose()
+    } catch (error) {
+      console.error('Error creating in Jira:', error)
+      alert(`Error al crear épica en Jira: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    } finally {
+      setIsCreatingInJira(false)
+    }
+  }
+
   return (
     <Drawer open={open} onOpenChange={onClose} direction={direction} dismissible={false} modal={true}>
       <DrawerContent>
@@ -236,6 +254,19 @@ export function EditTaskModal({ open, onClose, task, onSave, onSyncFromJira, con
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${isSyncingFromJira ? 'animate-spin' : ''}`} />
                   {isSyncingFromJira ? 'Actualizando...' : 'Actualizar desde Jira'}
+                </Button>
+              )}
+              {!task.jiraEpicKey && onCreateInJira && (
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={handleCreateInJira}
+                  disabled={isCreatingInJira}
+                  className="gap-2 flex-shrink-0 bg-[#0052CC] hover:bg-[#0747A6]"
+                >
+                  <Plus className={`h-3.5 w-3.5 ${isCreatingInJira ? 'animate-spin' : ''}`} />
+                  {isCreatingInJira ? 'Creando...' : 'Crear en Jira'}
                 </Button>
               )}
               <Button 

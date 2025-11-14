@@ -9,10 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import Link from "next/link"
-import { ArrowLeft, Save, Check, Star, Link as LinkIcon, Trash2, Plus, Key, AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
+import { ArrowLeft, Save, Check, Star, Link as LinkIcon, Trash2, Plus, Key, Settings as SettingsIcon } from "lucide-react"
 import SettingsRow from "@/components/settings-row"
 import { toast } from "sonner"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { JiraCredentialsModal } from "@/components/jira-credentials-modal"
+import { getSavedEmail, hasValidToken, clearJiraCredentials } from "@/lib/credentials-manager"
 
 export default function SettingsPage() {
   const { config, updateConfig } = useRoadmapConfig()
@@ -33,13 +34,23 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false)
 
   // Jira settings state
-  const [jiraEmail, setJiraEmail] = useState(jiraSync.savedBoards.email || "")
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false)
+  const [hasCredentials, setHasCredentials] = useState(false)
+  const [savedEmail, setSavedEmail] = useState<string | null>(null)
   const [isAddingBoard, setIsAddingBoard] = useState(false)
   const [newBoardName, setNewBoardName] = useState("")
   const [newBoardUrl, setNewBoardUrl] = useState("")
-  const [testToken, setTestToken] = useState("")
-  const [isTestingConnection, setIsTestingConnection] = useState(false)
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  // Check if credentials are configured
+  useEffect(() => {
+    const checkCredentials = async () => {
+      const email = getSavedEmail()
+      const token = await hasValidToken()
+      setHasCredentials(!!(email && token))
+      setSavedEmail(email)
+    }
+    checkCredentials()
+  }, [])
 
   // Sync local state with config when it changes
   useEffect(() => {
@@ -74,11 +85,6 @@ export default function SettingsPage() {
       defaults
     })
     
-    // Guardar email de Jira si cambió
-    if (jiraEmail !== jiraSync.savedBoards.email) {
-      jiraSync.addBoard(jiraSync.savedBoards.boards[0] || { id: '', name: '', url: '' }, jiraEmail)
-    }
-    
     // Mostrar toast de éxito
     toast.success("Configuración guardada", {
       description: "Todos los cambios se han guardado correctamente",
@@ -92,36 +98,45 @@ export default function SettingsPage() {
   }
 
   const handleAddBoard = () => {
-    if (!newBoardName.trim() || !newBoardUrl.trim() || !jiraEmail.trim()) {
+    if (!newBoardName.trim() || !newBoardUrl.trim()) {
       toast.error("Error", {
         description: "Por favor completa todos los campos",
       })
       return
     }
 
-    try {
-      const url = new URL(newBoardUrl)
-      const boardMatch = url.pathname.match(/\/boards\/(\d+)/)
-      const boardId = boardMatch ? boardMatch[1] : Date.now().toString()
-
-      jiraSync.addBoard({
-        id: boardId,
-        name: newBoardName.trim(),
-        url: newBoardUrl.trim()
-      }, jiraEmail.trim())
-
-      toast.success("Board agregado", {
-        description: `${newBoardName} se agregó correctamente`,
-      })
-
-      setIsAddingBoard(false)
-      setNewBoardName("")
-      setNewBoardUrl("")
-    } catch (err) {
+    const email = getSavedEmail()
+    if (!email) {
       toast.error("Error", {
-        description: "URL inválida. Verifica el formato",
+        description: "No hay email configurado. Por favor, configura tus credenciales primero.",
       })
+      return
     }
+
+    // Treat newBoardUrl as a project key (e.g., TMSGWEBSEC)
+    const projectKey = newBoardUrl.trim().toUpperCase()
+    
+    // Validate project key format (letters and numbers only)
+    if (!/^[A-Z0-9]+$/.test(projectKey)) {
+      toast.error("Error", {
+        description: "El Project Key debe contener solo letras mayúsculas y números (ej: TMSGWEBSEC)",
+      })
+      return
+    }
+
+    jiraSync.addBoard({
+      id: projectKey, // Use project key as ID
+      name: newBoardName.trim(),
+      projectKey: projectKey,
+    }, email)
+
+    toast.success("Board agregado", {
+      description: `${newBoardName} se agregó correctamente`,
+    })
+
+    setIsAddingBoard(false)
+    setNewBoardName("")
+    setNewBoardUrl("")
   }
 
   const handleRemoveBoard = (boardId: string) => {
@@ -134,53 +149,24 @@ export default function SettingsPage() {
     }
   }
 
-  const handleClearToken = () => {
-    if (confirm("¿Estás seguro de que quieres borrar el token guardado?")) {
-      jiraSync.saveCredentials(null)
-      toast.success("Token borrado", {
-        description: "Deberás ingresar el token en la próxima sincronización",
+  const handleClearCredentials = async () => {
+    if (confirm("¿Estás seguro de que quieres borrar todas las credenciales guardadas?")) {
+      await clearJiraCredentials()
+      setHasCredentials(false)
+      setSavedEmail(null)
+      toast.success("Credenciales borradas", {
+        description: "Deberás configurar tus credenciales nuevamente",
       })
     }
   }
 
-  const handleTestConnection = async () => {
-    if (!jiraEmail.trim() || !testToken.trim()) {
-      setTestResult({
-        success: false,
-        message: "Por favor ingresa email y token"
-      })
-      return
-    }
-
-    if (jiraSync.savedBoards.boards.length === 0) {
-      setTestResult({
-        success: false,
-        message: "Debes tener al menos un board configurado"
-      })
-      return
-    }
-
-    setIsTestingConnection(true)
-    setTestResult(null)
-
-    try {
-      const firstBoard = jiraSync.savedBoards.boards[0]
-      const { fetchEpicsFromBoard } = await import('@/lib/jira-client')
-      const epics = await fetchEpicsFromBoard(firstBoard.url, jiraEmail.trim(), testToken.trim())
-      
-      setTestResult({
-        success: true,
-        message: `Conexión exitosa! Se encontraron ${epics.length} épicas`
-      })
-      setTestToken("")
-    } catch (err) {
-      setTestResult({
-        success: false,
-        message: err instanceof Error ? err.message : "Error al conectar con Jira"
-      })
-    } finally {
-      setIsTestingConnection(false)
-    }
+  const handleCredentialsSuccess = async (email: string) => {
+    setShowCredentialsModal(false)
+    setHasCredentials(true)
+    setSavedEmail(email)
+    toast.success("Credenciales guardadas", {
+      description: "Tus credenciales se han configurado correctamente",
+    })
   }
 
   
@@ -396,44 +382,45 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Email */}
-            <div className="space-y-2">
-              <Label htmlFor="jira-email" className="font-medium">Email de Jira</Label>
-              <Input
-                id="jira-email"
-                type="email"
-                placeholder="tu-email@empresa.com"
-                value={jiraEmail}
-                onChange={(e) => setJiraEmail(e.target.value)}
-              />
-            </div>
-
-            {/* Token Status */}
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-              <div className="flex items-center gap-2">
-                <Key className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Token de API</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {jiraSync.savedCredentials?.token ? (
-                  <>
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    <span className="text-sm text-green-600">Token guardado</span>
+            {/* Credentials Status */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Key className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Credenciales</span>
+                  </div>
+                  {hasCredentials ? (
+                    <p className="text-xs text-muted-foreground">
+                      Email: {savedEmail}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      No hay credenciales configuradas
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCredentialsModal(true)}
+                    className="h-8"
+                  >
+                    <SettingsIcon className="h-3.5 w-3.5 mr-1" />
+                    {hasCredentials ? 'Reconfigurar' : 'Configurar'}
+                  </Button>
+                  {hasCredentials && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={handleClearToken}
-                      className="text-red-600 hover:text-red-700 h-7"
+                      onClick={handleClearCredentials}
+                      className="text-red-600 hover:text-red-700 h-8"
                     >
-                      Borrar
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
-                  </>
-                ) : (
-                  <>
-                    <AlertCircle className="h-4 w-4 text-orange-600" />
-                    <span className="text-sm text-muted-foreground">Sin token guardado</span>
-                  </>
-                )}
+                  )}
+                </div>
               </div>
             </div>
 
@@ -465,13 +452,17 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="new-board-url" className="text-sm">URL del Board</Label>
+                    <Label htmlFor="new-board-url" className="text-sm">Project Key</Label>
                     <Input
                       id="new-board-url"
-                      placeholder="https://company.atlassian.net/..."
+                      placeholder="TMSGWEBSEC"
                       value={newBoardUrl}
-                      onChange={(e) => setNewBoardUrl(e.target.value)}
+                      onChange={(e) => setNewBoardUrl(e.target.value.toUpperCase())}
+                      className="font-mono"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      El código del proyecto en Jira
+                    </p>
                   </div>
                   <div className="flex gap-2">
                     <Button onClick={handleAddBoard} size="sm" className="flex-1">
@@ -504,8 +495,8 @@ export default function SettingsPage() {
                         <LinkIcon className="h-4 w-4 text-blue-600" />
                         <div>
                           <p className="font-medium text-sm">{board.name}</p>
-                          <p className="text-xs text-muted-foreground truncate max-w-md">
-                            {board.url}
+                          <p className="text-xs text-muted-foreground font-mono">
+                            {board.projectKey}
                           </p>
                         </div>
                       </div>
@@ -527,51 +518,23 @@ export default function SettingsPage() {
               )}
             </div>
 
-            {/* Test Connection */}
-            <div className="pt-4 border-t space-y-3">
-              <Label className="font-medium">Probar Conexión</Label>
-              <div className="space-y-2">
-                <Input
-                  type="password"
-                  placeholder="Ingresa tu token para probar"
-                  value={testToken}
-                  onChange={(e) => setTestToken(e.target.value)}
-                />
-                <Button
-                  onClick={handleTestConnection}
-                  disabled={isTestingConnection || !jiraEmail.trim() || !testToken.trim()}
-                  className="w-full"
-                  size="sm"
-                >
-                  {isTestingConnection ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
-                      Probando...
-                    </>
-                  ) : (
-                    'Probar Conexión'
-                  )}
-                </Button>
-
-                {testResult && (
-                  <Alert variant={testResult.success ? "default" : "destructive"} className="py-2">
-                    {testResult.success ? (
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    ) : (
-                      <AlertCircle className="h-3.5 w-3.5" />
-                    )}
-                    <AlertDescription className="text-xs ml-2">
-                      {testResult.message}
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </div>
-            </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Centralized Credentials Modal */}
+      <JiraCredentialsModal
+        open={showCredentialsModal}
+        onClose={() => setShowCredentialsModal(false)}
+        onSuccess={handleCredentialsSuccess}
+        requireProjectKey={false}
+        title="Configurar Credenciales de Jira"
+        description="Actualiza o configura tus credenciales para acceder a Jira"
+      />
     </div>
   )
 }
+
+
 
 

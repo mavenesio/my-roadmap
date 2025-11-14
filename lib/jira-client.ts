@@ -83,11 +83,10 @@ export function parseJiraBoardUrl(url: string): ParsedJiraUrl {
 
 /**
  * Fetch epics from a Jira project
+ * Note: Email and token are now read from httpOnly cookies by the API
  */
 export async function fetchEpicsFromBoard(
-  boardUrl: string,
-  email: string,
-  token: string
+  boardUrl: string
 ): Promise<JiraEpic[]> {
   const { domain, projectKey } = parseJiraBoardUrl(boardUrl)
   
@@ -98,21 +97,23 @@ export async function fetchEpicsFromBoard(
   }
 
   try {
+    // Try to extract board ID from URL
+    const boardIdMatch = boardUrl.match(/boards\/(\d+)/)
+    const boardId = boardIdMatch ? boardIdMatch[1] : undefined
+    
     const payload = {
       domain,
       projectKey,
-      email,
-      token,
+      boardId,
     }
     
     console.log('📤 Sending to API:', { 
       domain, 
-      projectKey, 
-      email: email ? '***' : undefined, 
-      token: token ? '***' : undefined 
+      projectKey,
+      boardId,
     })
 
-    // Call our API route instead of calling Jira directly
+    // Call our API route (credentials are read from httpOnly cookies)
     const response = await fetch('/api/jira/epics', {
       method: 'POST',
       headers: {
@@ -124,12 +125,24 @@ export async function fetchEpicsFromBoard(
       throw new Error(`Error de red: ${fetchError.message || 'No se pudo conectar con el servidor'}`)
     })
 
-    console.log('📥 Response status:', response.status)
+    console.log('📥 Response status:', response.status, response.statusText)
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
-      console.error('❌ API Error:', errorData)
-      throw new Error(errorData.error || `Error al obtener épicas: ${response.status}`)
+      const responseText = await response.text()
+      console.error('❌ API Error Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: responseText
+      })
+      
+      let errorData
+      try {
+        errorData = JSON.parse(responseText)
+      } catch {
+        errorData = { error: responseText || `Error ${response.status}: ${response.statusText}` }
+      }
+      
+      throw new Error(errorData.error || `Error al obtener épicas: ${response.status} ${response.statusText}`)
     }
 
     const data = await response.json()
@@ -146,15 +159,14 @@ export async function fetchEpicsFromBoard(
 
 /**
  * Fetch stories (issues) associated with an epic
+ * Note: Email and token are now read from httpOnly cookies by the API
  */
 export async function fetchStoriesFromEpic(
   epicKey: string,
-  domain: string,
-  email: string,
-  token: string
+  domain: string
 ): Promise<JiraStory[]> {
   try {
-    // Call our API route instead of calling Jira directly
+    // Call our API route (credentials are read from httpOnly cookies)
     const response = await fetch('/api/jira/stories', {
       method: 'POST',
       headers: {
@@ -163,14 +175,27 @@ export async function fetchStoriesFromEpic(
       body: JSON.stringify({
         domain,
         epicKey,
-        email,
-        token,
       }),
     })
 
+    console.log('📥 Stories response status:', response.status, response.statusText)
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
-      throw new Error(errorData.error || `Error al obtener stories: ${response.status}`)
+      const responseText = await response.text()
+      console.error('❌ Stories API Error Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: responseText
+      })
+      
+      let errorData
+      try {
+        errorData = JSON.parse(responseText)
+      } catch {
+        errorData = { error: responseText || `Error ${response.status}: ${response.statusText}` }
+      }
+      
+      throw new Error(errorData.error || `Error al obtener stories: ${response.status} ${response.statusText}`)
     }
 
     const data = await response.json()
@@ -185,11 +210,10 @@ export async function fetchStoriesFromEpic(
 
 /**
  * Fetch users from a Jira project
+ * Note: Email and token are now read from httpOnly cookies by the API
  */
 export async function fetchJiraUsers(
-  boardUrl: string,
-  email: string,
-  token: string
+  boardUrl: string
 ): Promise<JiraUser[]> {
   const { domain, projectKey } = parseJiraBoardUrl(boardUrl)
   
@@ -200,7 +224,7 @@ export async function fetchJiraUsers(
   }
 
   try {
-    // Call our API route instead of calling Jira directly
+    // Call our API route (credentials are read from httpOnly cookies)
     const response = await fetch('/api/jira/users', {
       method: 'POST',
       headers: {
@@ -209,20 +233,30 @@ export async function fetchJiraUsers(
       body: JSON.stringify({
         domain,
         projectKey,
-        email,
-        token,
       }),
     }).catch((fetchError) => {
       console.error('❌ Fetch error:', fetchError)
       throw new Error(`Error de red: ${fetchError.message || 'No se pudo conectar con el servidor'}`)
     })
 
-    console.log('📥 Users response status:', response.status)
+    console.log('📥 Users response status:', response.status, response.statusText)
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
-      console.error('❌ API Error:', errorData)
-      throw new Error(errorData.error || `Error al obtener usuarios: ${response.status}`)
+      const responseText = await response.text()
+      console.error('❌ Users API Error Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: responseText
+      })
+      
+      let errorData
+      try {
+        errorData = JSON.parse(responseText)
+      } catch {
+        errorData = { error: responseText || `Error ${response.status}: ${response.statusText}` }
+      }
+      
+      throw new Error(errorData.error || `Error al obtener usuarios: ${response.status} ${response.statusText}`)
     }
 
     const data = await response.json()
@@ -238,18 +272,15 @@ export async function fetchJiraUsers(
 }
 
 /**
- * Test Jira connection with the provided credentials
- * Note: This function is not used in the current implementation
- * as we validate credentials on the first API call
+ * Test Jira connection with the saved credentials
+ * Note: Credentials are read from httpOnly cookies by the API
  */
 export async function testJiraConnection(
-  boardUrl: string,
-  email: string,
-  token: string
+  boardUrl: string
 ): Promise<boolean> {
   try {
     // Try to fetch epics as a connection test
-    await fetchEpicsFromBoard(boardUrl, email, token)
+    await fetchEpicsFromBoard(boardUrl)
     return true
   } catch (error) {
     return false

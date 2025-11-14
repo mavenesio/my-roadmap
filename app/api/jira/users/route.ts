@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getJiraCredentialsFromCookie } from '@/lib/server-auth'
 
 export async function POST(request: NextRequest) {
   try {
-    const { domain, projectKey, email, token } = await request.json()
+    const { domain, projectKey } = await request.json()
 
-    if (!domain || !projectKey || !email || !token) {
+    if (!domain || !projectKey) {
       return NextResponse.json(
-        { error: 'Faltan parámetros requeridos' },
+        { error: 'Faltan parámetros requeridos: domain y projectKey' },
         { status: 400 }
+      )
+    }
+
+    // Get credentials from httpOnly cookie
+    const { email, token } = await getJiraCredentialsFromCookie()
+
+    if (!email || !token) {
+      return NextResponse.json(
+        { error: 'No hay credenciales guardadas. Por favor, configura tus credenciales de Jira primero.' },
+        { status: 401 }
       )
     }
 

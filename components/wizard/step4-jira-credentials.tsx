@@ -2,15 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Link as LinkIcon, Mail, Key, AlertCircle, Loader2, CheckCircle } from "lucide-react"
+import { Link as LinkIcon, CheckCircle, Loader2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { WizardData } from "../initialization-wizard"
 import { parseJiraBoardUrl, fetchEpicsFromBoard } from "@/lib/jira-client"
 import { useJiraSync } from "@/hooks/use-jira-sync"
+import { JiraCredentialsModal } from "@/components/jira-credentials-modal"
+import { getSavedEmail, addBoard } from "@/lib/credentials-manager"
 
 interface Step4Props {
   data: Partial<WizardData>
@@ -24,72 +23,67 @@ interface Step4Props {
 export function Step4JiraCredentials({ data, onUpdate, onNext, onBack, onUpdateNavigation, onRegisterHandler }: Step4Props) {
   const jiraSync = useJiraSync()
   
-  const [boardUrl, setBoardUrl] = useState("")
-  const [email, setEmail] = useState("")
-  const [token, setToken] = useState("")
-  const [saveToken, setSaveToken] = useState(false)
-  const [error, setError] = useState("")
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
   const [success, setSuccess] = useState(false)
-  
-  // Pre-load email and token if saved
+  const [error, setError] = useState("")
+  const [credentialsConfigured, setCredentialsConfigured] = useState(false)
+
+  // Check if credentials are already configured
   useEffect(() => {
-    const savedBoards = jiraSync.getBoards()
-    const savedCredentials = jiraSync.getCredentials()
-    
-    if (savedBoards.email && !email) {
-      setEmail(savedBoards.email)
+    const checkCredentials = async () => {
+      const email = getSavedEmail()
+      const token = await jiraSync.getToken()
+      setCredentialsConfigured(!!(email && token))
     }
+    checkCredentials()
+  }, [jiraSync])
+
+  const handleOpenModal = () => {
+    setShowCredentialsModal(true)
+  }
+
+  const handleCredentialsSuccess = async (email: string) => {
+    setShowCredentialsModal(false)
+    setCredentialsConfigured(true)
+    setSuccess(true)
     
-    if (savedCredentials?.token && !token) {
-      setToken(savedCredentials.token)
-      setSaveToken(true)
-    }
-  }, [jiraSync, email, token])
+    // Auto-continue to next step after a short delay
+    setTimeout(() => {
+      handleContinue()
+    }, 1000)
+  }
 
   const handleContinue = useCallback(async () => {
     setError("")
     setSuccess(false)
 
-    // Validar campos
-    if (!boardUrl.trim()) {
-      setError("Por favor, ingresa la URL del board de Jira")
+    // Check if credentials are configured
+    const email = getSavedEmail()
+    const token = await jiraSync.getToken()
+    
+    if (!email || !token) {
+      setError("Por favor, configura tus credenciales de Jira primero")
       return
     }
 
-    if (!email.trim()) {
-      setError("Por favor, ingresa tu email de Jira")
+    // Get the first board URL from saved boards, or ask user to configure
+    const savedBoards = jiraSync.getBoards()
+    if (!savedBoards.boards || savedBoards.boards.length === 0) {
+      setError("No hay boards configurados. Por favor, configura al menos un board.")
       return
     }
 
-    if (!token.trim()) {
-      setError("Por favor, ingresa tu API token de Jira")
-      return
-    }
+    const boardUrl = savedBoards.boards[0].url
 
-    // Parsear URL
-    let parsed
-    try {
-      parsed = parseJiraBoardUrl(boardUrl)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "URL de Jira inválida")
-      return
-    }
-
-    // Probar conexión con Jira
+    // Validate by fetching epics
     setIsValidating(true)
-    onUpdateNavigation?.(false, true) // Deshabilitar navegación durante validación
+    onUpdateNavigation?.(false, true)
     
     try {
       console.log('🔍 Validando conexión con Jira...')
-      console.log('📋 Datos a enviar:', { 
-        boardUrl: boardUrl.trim(), 
-        email: email.trim() ? '***' : 'vacío', 
-        token: token.trim() ? '***' : 'vacío',
-        parsed 
-      })
       
-      const epics = await fetchEpicsFromBoard(boardUrl.trim(), email.trim(), token.trim())
+      const epics = await fetchEpicsFromBoard(boardUrl)
       console.log(`✅ Conexión exitosa! Se encontraron ${epics.length} épicas`)
       
       if (!epics || epics.length === 0) {
@@ -100,17 +94,16 @@ export function Step4JiraCredentials({ data, onUpdate, onNext, onBack, onUpdateN
       
       setSuccess(true)
       
+      const parsed = parseJiraBoardUrl(boardUrl)
       const newBoard = {
-        boardUrl: boardUrl.trim(),
-        email: email.trim(),
-        token: token.trim(),
-        saveToken,
+        boardUrl: boardUrl,
+        email: email,
         domain: parsed.domain,
         projectKey: parsed.projectKey,
-        epics: epics, // Guardar las épicas obtenidas
+        epics: epics,
       }
 
-      // Agregar o actualizar el board
+      // Agregar o actualizar el board en wizard data
       const existingBoards = data.jiraBoards || []
       const updatedBoards = [...existingBoards, newBoard]
       
@@ -127,25 +120,14 @@ export function Step4JiraCredentials({ data, onUpdate, onNext, onBack, onUpdateN
       
       if (err instanceof Error) {
         errorMessage = err.message
-        
-        // Agregar sugerencias específicas según el tipo de error
-        if (errorMessage.includes('Could not establish connection')) {
-          errorMessage = "Error de conexión. Posibles causas:\n• El servidor de desarrollo no está corriendo\n• Una extensión del navegador está bloqueando la solicitud\n• Problema de red\n\nIntenta recargar la página o deshabilita las extensiones temporalmente."
-        } else if (errorMessage.includes('401')) {
-          errorMessage = "Credenciales inválidas. Verifica tu email y API token de Jira."
-        } else if (errorMessage.includes('403')) {
-          errorMessage = "No tienes permisos para acceder a este proyecto."
-        } else if (errorMessage.includes('404')) {
-          errorMessage = "No se encontró el proyecto. Verifica la URL del board."
-        }
       }
       
       setError(errorMessage)
-      onUpdateNavigation?.(true, false) // Rehabilitar navegación después de error
+      onUpdateNavigation?.(true, false)
     } finally {
       setIsValidating(false)
     }
-  }, [boardUrl, email, token, saveToken, data.jiraBoards, onUpdate, onNext, onUpdateNavigation])
+  }, [data.jiraBoards, onUpdate, onNext, onUpdateNavigation, jiraSync])
 
   // Register this step's continue handler with the wizard
   useEffect(() => {
@@ -173,136 +155,107 @@ export function Step4JiraCredentials({ data, onUpdate, onNext, onBack, onUpdateN
             Credenciales de Jira
           </CardTitle>
           <CardDescription>
-            Ingresa los datos de tu cuenta de Jira para sincronizar épicas
+            Configura tus credenciales de forma segura para acceder a Jira
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {credentialsConfigured ? (
+            <div className="space-y-4">
+              <Alert className="bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-900">
+                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                <AlertDescription className="text-green-800 dark:text-green-300">
+                  Credenciales configuradas correctamente
+                </AlertDescription>
+              </Alert>
+              
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleOpenModal}
+                className="w-full"
+              >
+                Reconfigurar Credenciales
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Necesitas configurar tus credenciales de Jira para continuar. 
+                Tus credenciales se guardarán de forma segura.
+              </p>
+              
+              <Button
+                type="button"
+                onClick={handleOpenModal}
+                className="w-full"
+              >
+                Configurar Credenciales
+              </Button>
+            </div>
+          )}
+
           {error && (
             <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="whitespace-pre-wrap">{error}</AlertDescription>
+              <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          
-          {success && (
-            <Alert className="border-green-500 bg-green-50 text-green-900">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <AlertDescription>
-                ✅ Conexión exitosa con Jira! Redirigiendo...
-              </AlertDescription>
-            </Alert>
-          )}
-          
+
           {isValidating && (
-            <Alert className="border-blue-500 bg-blue-50 text-blue-900">
-              <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
-              <AlertDescription>
-                Validando conexión con Jira... Esto puede tomar unos segundos.
+            <div className="flex items-center justify-center gap-2 py-4">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm text-muted-foreground">
+                Validando conexión con Jira...
+              </span>
+            </div>
+          )}
+
+          {success && (
+            <Alert className="bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-900">
+              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <AlertDescription className="text-green-800 dark:text-green-300">
+                ¡Conexión exitosa con Jira!
               </AlertDescription>
             </Alert>
           )}
-
-          <div>
-            <Label htmlFor="boardUrl">URL del Board de Jira *</Label>
-            <Input
-              id="boardUrl"
-              value={boardUrl}
-              onChange={(e) => setBoardUrl(e.target.value)}
-              placeholder="https://company.atlassian.net/jira/software/c/projects/PROJ/boards/123"
-              className="mt-1"
-              disabled={isValidating}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Copia la URL completa de tu board de Jira desde el navegador
-            </p>
-          </div>
-
-          <div>
-            <Label htmlFor="email">Email de Jira *</Label>
-            <div className="relative mt-1">
-              <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu-email@company.com"
-                className="pl-10"
-                disabled={isValidating}
-              />
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              El email que usas para iniciar sesión en Jira
-            </p>
-          </div>
-
-          <div>
-            <Label htmlFor="token">API Token de Jira *</Label>
-            <div className="relative mt-1">
-              <Key className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <Input
-                id="token"
-                type="password"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="Tu API token de Jira"
-                className="pl-10"
-                disabled={isValidating}
-              />
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              Genera un token en{" "}
-              <a
-                href="https://id.atlassian.com/manage-profile/security/api-tokens"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
-              >
-                Atlassian Security
-              </a>
-            </p>
-          </div>
-
-          <div className="flex items-center space-x-2 p-4 bg-gray-50 rounded-lg">
-            <Checkbox
-              id="saveToken"
-              checked={saveToken}
-              onCheckedChange={(checked) => setSaveToken(checked as boolean)}
-              disabled={isValidating}
-            />
-            <label
-              htmlFor="saveToken"
-              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              Guardar credenciales en el navegador
-            </label>
-          </div>
-
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="text-sm">
-              <strong>Nota de seguridad:</strong> Si guardas las credenciales, se almacenarán 
-              en el localStorage de tu navegador. Solo hazlo en dispositivos de confianza.
-            </AlertDescription>
-          </Alert>
         </CardContent>
       </Card>
 
-      <Card className="bg-blue-50 border-blue-200">
-        <CardHeader>
-          <CardTitle className="text-blue-900 text-base">¿Cómo obtener un API Token?</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-blue-800 space-y-2">
-          <ol className="list-decimal list-inside space-y-1">
-            <li>Ve a tu perfil de Atlassian</li>
-            <li>Navega a Seguridad → API tokens</li>
-            <li>Click en "Crear API token"</li>
-            <li>Dale un nombre y copia el token generado</li>
-            <li>Pega el token en el campo de arriba</li>
-          </ol>
-        </CardContent>
-      </Card>
+      {/* Navigation Buttons */}
+      <div className="flex justify-between pt-4">
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={onBack}
+          disabled={isValidating}
+        >
+          Anterior
+        </Button>
+        <Button 
+          type="button"
+          onClick={handleContinue}
+          disabled={!credentialsConfigured || isValidating}
+        >
+          {isValidating ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Validando...
+            </>
+          ) : (
+            'Continuar'
+          )}
+        </Button>
+      </div>
+
+      {/* Centralized Credentials Modal */}
+      <JiraCredentialsModal
+        open={showCredentialsModal}
+        onClose={() => setShowCredentialsModal(false)}
+        onSuccess={handleCredentialsSuccess}
+        requireProjectKey={true}
+        title="Configurar Jira"
+        description="Ingresa tus credenciales y el Project Key para comenzar"
+        isFirstTimeSetup={true}
+      />
     </div>
   )
 }
-
