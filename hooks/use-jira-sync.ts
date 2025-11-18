@@ -13,6 +13,7 @@ import {
 } from '@/lib/jira-client'
 import {
   getSavedEmail,
+  getSavedToken,
   getSavedBoards,
   saveBoards,
   addBoard as addBoardToStorage,
@@ -57,25 +58,26 @@ export function useJiraSync() {
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<SyncProgress | null>(null)
 
-  // Get saved credentials (from cookies + localStorage)
-  const getCredentials = useCallback(async () => {
+  // Get saved credentials (from localStorage/sessionStorage)
+  const getCredentials = useCallback(() => {
     const email = getSavedEmail()
-    const hasToken = await hasValidToken()
+    const token = getSavedToken()
     
-    if (!email || !hasToken) {
+    if (!email || !token) {
       return null
     }
     
     return {
       email,
-      hasToken,
+      token,
+      hasToken: true,
     }
   }, [])
 
-  // Legacy: getToken - now checks if token exists in cookie
-  const getToken = useCallback(async () => {
-    const hasToken = await hasValidToken()
-    return hasToken ? 'exists' : null
+  // Legacy: getToken - now returns token from localStorage/sessionStorage
+  const getToken = useCallback(() => {
+    const token = getSavedToken()
+    return token || null
   }, [])
   
   // Boards Management

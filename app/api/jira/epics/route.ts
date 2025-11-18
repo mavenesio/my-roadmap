@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getJiraCredentialsFromCookie } from '@/lib/server-auth'
+import { getJiraCredentialsFromHeaders } from '@/lib/server-auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,8 +12,8 @@ export async function POST(request: NextRequest) {
     
     const { domain, projectKey, boardId } = body
 
-    // Get credentials from httpOnly cookie
-    const { email, token } = await getJiraCredentialsFromCookie()
+    // Get credentials from request headers
+    const { email, token } = getJiraCredentialsFromHeaders(request)
 
     console.log('📥 Epics API - Extracted params:', { 
       domain: domain || 'MISSING', 

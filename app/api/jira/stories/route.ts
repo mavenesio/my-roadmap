@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getJiraCredentialsFromCookie } from '@/lib/server-auth'
+import { getJiraCredentialsFromHeaders } from '@/lib/server-auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,8 +12,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get credentials from httpOnly cookie
-    const { email, token } = await getJiraCredentialsFromCookie()
+    // Get credentials from request headers
+    const { email, token } = getJiraCredentialsFromHeaders(request)
 
     if (!email || !token) {
       return NextResponse.json(
@@ -60,8 +60,9 @@ export async function POST(request: NextRequest) {
         displayName: issue.fields.assignee.displayName,
         avatarUrls: issue.fields.assignee.avatarUrls,
       } : undefined,
-      startDate: issue.fields.customfield_10015,
-      dueDate: issue.fields.duedate,
+      // Usar created como fallback para startDate si el custom field es null
+      startDate: issue.fields.customfield_10015 || issue.fields.created,
+      dueDate: issue.fields.duedate || issue.fields.customfield_10016,
       created: issue.fields.created,
       updated: issue.fields.updated,
       description: issue.fields.description,

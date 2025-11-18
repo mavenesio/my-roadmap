@@ -123,8 +123,8 @@ export function JiraCredentialsModal({
         setSuccess(true)
       }
 
-      // Save credentials
-      await saveJiraCredentials({
+      // Save credentials to localStorage/sessionStorage
+      saveJiraCredentials({
         email: email.trim(),
         token: token.trim(),
         rememberToken,

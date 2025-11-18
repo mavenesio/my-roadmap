@@ -1,78 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { setJiraCredentialsCookie, getJiraCredentialsFromCookie, clearJiraCredentialsCookie, hasJiraCredentials } from '@/lib/server-auth'
+
+/**
+ * This route is deprecated and kept for backwards compatibility only.
+ * Credentials are now stored in localStorage on the client side
+ * and sent in headers with each request.
+ * 
+ * You can safely remove this file if no code is using these endpoints.
+ */
 
 /**
  * POST /api/auth/jira
- * Save Jira credentials to httpOnly cookies
+ * Deprecated: Credentials are now stored in client localStorage
  */
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { email, token, rememberToken } = body
-
-    if (!email || !token) {
-      return NextResponse.json(
-        { error: 'Email and token are required' },
-        { status: 400 }
-      )
-    }
-
-    // Set credentials in httpOnly cookies
-    await setJiraCredentialsCookie(email, token, rememberToken || false)
-
-    return NextResponse.json({ 
-      success: true,
-      message: 'Credentials saved successfully'
-    })
-  } catch (error) {
-    console.error('Error saving Jira credentials:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
+  return NextResponse.json(
+    { 
+      error: 'This endpoint is deprecated. Credentials are now stored in localStorage.',
+      deprecated: true
+    },
+    { status: 410 } // 410 Gone
+  )
 }
 
 /**
  * GET /api/auth/jira
- * Check if we have valid Jira credentials
+ * Deprecated: Credentials are now stored in client localStorage
  */
 export async function GET() {
-  try {
-    const hasCredentials = await hasJiraCredentials()
-    const credentials = hasCredentials ? await getJiraCredentialsFromCookie() : null
-
-    return NextResponse.json({
-      hasToken: hasCredentials,
-      email: credentials?.email || null
-    })
-  } catch (error) {
-    console.error('Error checking Jira credentials:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
+  return NextResponse.json(
+    { 
+      error: 'This endpoint is deprecated. Check credentials in localStorage.',
+      deprecated: true
+    },
+    { status: 410 } // 410 Gone
+  )
 }
 
 /**
  * DELETE /api/auth/jira
- * Clear Jira credentials from cookies
+ * Deprecated: Credentials are now stored in client localStorage
  */
 export async function DELETE() {
-  try {
-    await clearJiraCredentialsCookie()
-
-    return NextResponse.json({
-      success: true,
-      message: 'Credentials cleared successfully'
-    })
-  } catch (error) {
-    console.error('Error clearing Jira credentials:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
+  return NextResponse.json(
+    { 
+      error: 'This endpoint is deprecated. Clear credentials from localStorage.',
+      deprecated: true
+    },
+    { status: 410 } // 410 Gone
+  )
 }
 

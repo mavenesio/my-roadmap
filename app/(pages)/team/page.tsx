@@ -2,41 +2,21 @@
 
 import { useRoadmapConfig, type TeamMember as TeamMemberType } from "@/hooks/use-roadmap-config"
 import { useState, useEffect, useMemo } from "react"
-import { useLocalStorage } from "@/hooks/use-local-storage"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, UserPlus, Users, Trash2, MessageSquare, Briefcase, Target } from "lucide-react"
+import { ArrowLeft, UserPlus, Users, Trash2, Edit, Target } from "lucide-react"
 import { AddTeamMemberModal } from "@/components/add-team-member-modal"
-import { MemberGoalsDrawer } from "@/components/member-goals-drawer"
 import { VacationsTimeline } from "@/components/vacations-timeline"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
-
-interface WeekAssignment {
-  weekId: string
-  assignees: string[]
-}
-
-interface Task {
-  id: string
-  name: string
-  priority: string
-  track: string
-  status: string
-  assignments: WeekAssignment[]
-}
 
 export default function TeamPage() {
   const router = useRouter()
   const { config, addTeamMember, updateTeamMember, removeTeamMember } = useRoadmapConfig()
   const members = useMemo(() => config?.teamMembers || [], [config?.teamMembers])
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [isGoalsDrawerOpen, setIsGoalsDrawerOpen] = useState(false)
-  const [selectedMemberForGoals, setSelectedMemberForGoals] = useState<TeamMemberType | null>(null)
-  const [tasks] = useLocalStorage<Task[]>('roadmap-tasks', [])
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -58,26 +38,6 @@ export default function TeamPage() {
       description: `${member.name} ha sido agregado al equipo`,
       duration: 3000,
     })
-  }
-
-
-  const handleUpdateMemberGoals = (updatedMember: TeamMemberType) => {
-    const success = updateTeamMember(updatedMember.name, {
-      goals: updatedMember.goals
-    })
-    if (!success) {
-      toast.error("Error", {
-        description: `No se pudo actualizar a ${updatedMember.name}`,
-        duration: 3000,
-      })
-      return
-    }
-    toast.success("Objetivos actualizados", {
-      description: `Los objetivos de ${updatedMember.name} han sido guardados`,
-      duration: 3000,
-    })
-    setIsGoalsDrawerOpen(false)
-    setSelectedMemberForGoals(null)
   }
 
   const handleDeleteMember = (member: TeamMemberType) => {
@@ -103,24 +63,6 @@ export default function TeamPage() {
       'España': '🇪🇸',
     }
     return flags[nationality] || '🌍'
-  }
-
-  // Contar tareas por colaborador
-  const getTaskCountForMember = (memberName: string) => {
-    return tasks.filter(task => 
-      task.assignments.some(assignment => 
-        assignment.assignees.some(assignee => assignee === memberName)
-      )
-    ).length
-  }
-
-  // Contar objetivos y progreso
-  const getGoalsStatsForMember = (member: TeamMemberType) => {
-    const goals = member.goals || []
-    const totalGoals = goals.length
-    const completedGoals = goals.filter(g => g.completed).length
-    const percentage = totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0
-    return { totalGoals, completedGoals, percentage }
   }
 
   return (
@@ -179,14 +121,10 @@ export default function TeamPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {members.map((member: TeamMemberType) => {
-                  const taskCount = getTaskCountForMember(member.name)
-                  const commentCount = member.comments?.length || 0
-                  const { totalGoals, completedGoals, percentage } = getGoalsStatsForMember(member)
-                  
                   return (
                     <div 
                       key={member.name} 
-                      className="flex flex-col p-5 rounded-lg border bg-card hover:bg-accent/50 transition-colors group relative"
+                      className="flex flex-col p-5 rounded-lg border bg-card hover:bg-accent/50 transition-colors group relative min-h-[280px]"
                     >
                       {/* Botón de eliminar en la esquina */}
                       <Button
@@ -203,7 +141,7 @@ export default function TeamPage() {
 
                       {/* Avatar y nombre */}
                       <div 
-                        className="flex flex-col items-center text-center cursor-pointer mb-4"
+                        className="flex flex-col items-center text-center cursor-pointer mb-4 flex-1"
                         onClick={() => router.push(`/team/${encodeURIComponent(member.name)}`)}
                       >
                         {member.avatarUrl ? (
@@ -212,19 +150,19 @@ export default function TeamPage() {
                             <AvatarFallback 
                               className="text-white font-semibold text-2xl"
                               style={{ backgroundColor: member.color }}
-                      >
+                            >
                               {member.name.charAt(0).toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
                         ) : (
-                        <div
-                          className="w-20 h-20 rounded-full flex items-center justify-center text-white font-semibold text-2xl mb-3"
-                          style={{ backgroundColor: member.color }}
-                        >
-                          {member.name.charAt(0).toUpperCase()}
-                        </div>
+                          <div
+                            className="w-20 h-20 rounded-full flex items-center justify-center text-white font-semibold text-2xl mb-3"
+                            style={{ backgroundColor: member.color }}
+                          >
+                            {member.name.charAt(0).toUpperCase()}
+                          </div>
                         )}
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap justify-center">
                           <h3 className="font-semibold text-lg">{member.name}</h3>
                           {member.nationality && (
                             <span className="text-xl">{getFlagEmoji(member.nationality)}</span>
@@ -235,51 +173,31 @@ export default function TeamPage() {
                         )}
                       </div>
 
-                      {/* Badges de info */}
-                      <div className="flex items-center justify-center gap-2 flex-wrap mb-4">
-                        {taskCount > 0 && (
-                          <Badge variant="secondary" className="gap-1">
-                            <Briefcase className="h-3 w-3" />
-                            {taskCount}
-                          </Badge>
-                        )}
-                        {commentCount > 0 && (
-                          <Badge variant="secondary" className="gap-1">
-                            <MessageSquare className="h-3 w-3" />
-                            {commentCount}
-                          </Badge>
-                        )}
-                        {totalGoals > 0 && (
-                          <Badge 
-                            variant="secondary" 
-                            className={`gap-1 ${
-                              percentage === 100 
-                                ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' 
-                                : percentage >= 50 
-                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
-                                : ''
-                            }`}
-                          >
-                            <Target className="h-3 w-3" />
-                            {completedGoals}/{totalGoals}
-                          </Badge>
-                        )}
-                      </div>
-
                       {/* Botones de acción */}
-                      <div className="flex gap-2 w-full">
+                      <div className="flex gap-2 w-full shrink-0">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="gap-2 w-full"
+                          className="gap-1.5 flex-1 min-w-0"
                           onClick={(e) => {
                             e.stopPropagation()
-                            setSelectedMemberForGoals(member)
-                            setIsGoalsDrawerOpen(true)
+                            router.push(`/team/${encodeURIComponent(member.name)}`)
                           }}
                         >
-                          <Target className="h-4 w-4" />
-                          Goals
+                          <Edit className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">Editar</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 flex-1 min-w-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            router.push(`/team/${encodeURIComponent(member.name)}?tab=metrics`)
+                          }}
+                        >
+                          <Target className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">Métricas</span>
                         </Button>
                       </div>
                     </div>
@@ -311,20 +229,6 @@ export default function TeamPage() {
         }}
         editingMember={null}
         existingMembers={members}
-      />
-
-      {/* Member Goals Drawer */}
-      <MemberGoalsDrawer
-        open={isGoalsDrawerOpen}
-        member={selectedMemberForGoals}
-        onClose={() => {
-          setIsGoalsDrawerOpen(false)
-          setSelectedMemberForGoals(null)
-        }}
-        onSave={handleUpdateMemberGoals}
-        tasks={tasks}
-        tracks={config.tracks}
-        readOnly={true}
       />
     </div>
   )

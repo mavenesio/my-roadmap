@@ -14,10 +14,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import Link from "next/link"
 import { ArrowLeft, Save, Plus, Trash2, CheckCircle, Circle, Briefcase, MessageSquare, Target, Calendar, Eye, Edit } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
+import { UserMetricsTab } from "@/components/user-metrics-tab"
 
 interface WeekAssignment {
   weekId: string
@@ -50,6 +52,11 @@ export default function MemberDetailPage() {
   const { config, updateTeamMember } = useRoadmapConfig()
   const [tasks] = useLocalStorage<Task[]>('roadmap-tasks', [])
   const [mounted, setMounted] = useState(false)
+  
+  // Get tab from query params
+  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+  const tabParam = searchParams.get('tab')
+  const [activeTab, setActiveTab] = useState<string>(tabParam === 'metrics' ? 'metrics' : 'overview')
 
   // State para datos editables
   const [editedName, setEditedName] = useState(memberName)
@@ -109,6 +116,19 @@ export default function MemberDetailPage() {
       setGoals(member.goals || [])
     }
   }, [member])
+
+  // Update active tab when query param changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search)
+      const tab = searchParams.get('tab')
+      if (tab === 'metrics') {
+        setActiveTab('metrics')
+      } else {
+        setActiveTab('overview')
+      }
+    }
+  }, [router])
 
   // Show loading only while mounting
   if (!mounted || !config) {
@@ -360,8 +380,17 @@ export default function MemberDetailPage() {
 
       {/* Content */}
       <div className="mx-auto max-w-7xl p-6 space-y-4">
-        {/* Datos del Usuario */}
-        <Card>
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
+            <TabsTrigger value="overview">Vista General</TabsTrigger>
+            <TabsTrigger value="metrics">Métricas</TabsTrigger>
+          </TabsList>
+
+          {/* Tab: Vista General */}
+          <TabsContent value="overview" className="space-y-4 mt-4">
+            {/* Datos del Usuario */}
+            <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Información Personal</CardTitle>
             <CardDescription className="text-sm">Edita los datos básicos del miembro</CardDescription>
@@ -932,6 +961,13 @@ export default function MemberDetailPage() {
             ) : null}
           </CardContent>
         </Card>
+          </TabsContent>
+
+          {/* Tab: Métricas */}
+          <TabsContent value="metrics" className="mt-4">
+            <UserMetricsTab memberName={memberName} tasks={tasks} />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

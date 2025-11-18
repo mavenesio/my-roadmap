@@ -33,6 +33,7 @@ export interface SavedJiraBoards {
 
 const STORAGE_KEYS = {
   EMAIL: 'jira-email',
+  TOKEN: 'jira-token',
   BOARDS: 'jira-boards',
 } as const
 
@@ -71,28 +72,25 @@ export function getJiraDomain(): string {
 }
 
 /**
- * Save Jira credentials
- * Email goes to localStorage, token goes to httpOnly cookie via API
+ * Save Jira credentials to localStorage
+ * Both email and token are stored in localStorage
+ * Note: rememberToken parameter is kept for backwards compatibility but not used
  */
-export async function saveJiraCredentials(credentials: JiraCredentials): Promise<void> {
+export function saveJiraCredentials(credentials: JiraCredentials): void {
+  if (typeof window === 'undefined') return
+  
   // Save email to localStorage
   localStorage.setItem(STORAGE_KEYS.EMAIL, credentials.email)
   
-  // Save token to httpOnly cookie via API
-  const response = await fetch('/api/auth/jira', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      email: credentials.email,
-      token: credentials.token,
-      rememberToken: credentials.rememberToken,
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error('Failed to save credentials')
+  // Save token to localStorage (only if rememberToken is true, otherwise sessionStorage)
+  if (credentials.rememberToken) {
+    localStorage.setItem(STORAGE_KEYS.TOKEN, credentials.token)
+    // Clear from sessionStorage if it was there
+    sessionStorage.removeItem(STORAGE_KEYS.TOKEN)
+  } else {
+    sessionStorage.setItem(STORAGE_KEYS.TOKEN, credentials.token)
+    // Clear from localStorage if it was there
+    localStorage.removeItem(STORAGE_KEYS.TOKEN)
   }
 }
 
@@ -105,31 +103,52 @@ export function getSavedEmail(): string | null {
 }
 
 /**
- * Check if we have a valid token (by calling API)
+ * Get saved token from localStorage or sessionStorage
  */
-export async function hasValidToken(): Promise<boolean> {
-  try {
-    const response = await fetch('/api/auth/jira', {
-      method: 'GET',
-    })
-    const data = await response.json()
-    return data.hasToken === true
-  } catch {
-    return false
+export function getSavedToken(): string | null {
+  if (typeof window === 'undefined') return null
+  
+  // Check localStorage first (persistent)
+  const tokenFromLocal = localStorage.getItem(STORAGE_KEYS.TOKEN)
+  if (tokenFromLocal) return tokenFromLocal
+  
+  // Check sessionStorage (session only)
+  const tokenFromSession = sessionStorage.getItem(STORAGE_KEYS.TOKEN)
+  if (tokenFromSession) return tokenFromSession
+  
+  return null
+}
+
+/**
+ * Check if we have a valid token in storage
+ */
+export function hasValidToken(): boolean {
+  const token = getSavedToken()
+  return !!token && token.length > 0
+}
+
+/**
+ * Get saved credentials (email and token)
+ */
+export function getSavedCredentials(): { email: string | null; token: string | null } {
+  return {
+    email: getSavedEmail(),
+    token: getSavedToken(),
   }
 }
 
 /**
- * Clear all Jira credentials
+ * Clear all Jira credentials from localStorage and sessionStorage
  */
-export async function clearJiraCredentials(): Promise<void> {
+export function clearJiraCredentials(): void {
+  if (typeof window === 'undefined') return
+  
   // Clear email from localStorage
   localStorage.removeItem(STORAGE_KEYS.EMAIL)
   
-  // Clear token cookie via API
-  await fetch('/api/auth/jira', {
-    method: 'DELETE',
-  })
+  // Clear token from both storages
+  localStorage.removeItem(STORAGE_KEYS.TOKEN)
+  sessionStorage.removeItem(STORAGE_KEYS.TOKEN)
 }
 
 /**
@@ -253,9 +272,6 @@ export async function validateJiraCredentials(
   token: string
 ): Promise<{ valid: boolean; error?: string; epicsCount?: number }> {
   try {
-    // Temporarily save credentials for validation
-    await saveJiraCredentials({ email, token, rememberToken: false })
-    
     // Build the board URL from project key
     const boardUrl = buildBoardUrl(projectKey)
     
@@ -267,12 +283,13 @@ export async function validateJiraCredentials(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Jira-Email': email,
+        'X-Jira-Token': token,
       },
       body: JSON.stringify({
         domain,
         projectKey: parsedKey || projectKey,
         boardId,
-        // Email and token will be read from cookie by the API
       }),
     })
     
@@ -301,13 +318,13 @@ export async function validateJiraCredentials(
  * Legacy compatibility: Check if we have saved credentials
  * This checks both email and token
  */
-export async function hasSavedCredentials(): Promise<{ hasEmail: boolean; hasToken: boolean }> {
+export function hasSavedCredentials(): { hasEmail: boolean; hasToken: boolean } {
   const email = getSavedEmail()
-  const hasToken = await hasValidToken()
+  const token = getSavedToken()
   
   return {
     hasEmail: !!email,
-    hasToken
+    hasToken: !!token
   }
 }
 

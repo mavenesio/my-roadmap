@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getJiraCredentialsFromCookie } from '@/lib/server-auth'
+import { getJiraCredentialsFromHeaders } from '@/lib/server-auth'
 import { getJiraDomain } from '@/lib/credentials-manager'
 
 /**
@@ -34,8 +34,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get credentials from httpOnly cookie
-    const { email, token } = await getJiraCredentialsFromCookie()
+    // Get credentials from request headers
+    const { email, token } = getJiraCredentialsFromHeaders(request)
 
     if (!email || !token) {
       console.error('❌ Missing credentials in cookies')

@@ -83,7 +83,7 @@ export function parseJiraBoardUrl(url: string): ParsedJiraUrl {
 
 /**
  * Fetch epics from a Jira project
- * Note: Email and token are now read from httpOnly cookies by the API
+ * Note: Email and token are now sent in headers from localStorage
  */
 export async function fetchEpicsFromBoard(
   boardUrl: string
@@ -94,6 +94,14 @@ export async function fetchEpicsFromBoard(
   
   if (!projectKey) {
     throw new Error('No se pudo extraer la clave del proyecto de la URL')
+  }
+
+  // Get credentials from localStorage
+  const { getSavedCredentials } = await import('./credentials-manager')
+  const { email, token } = getSavedCredentials()
+  
+  if (!email || !token) {
+    throw new Error('No hay credenciales guardadas. Por favor, configura tus credenciales de Jira primero.')
   }
 
   try {
@@ -113,11 +121,13 @@ export async function fetchEpicsFromBoard(
       boardId,
     })
 
-    // Call our API route (credentials are read from httpOnly cookies)
+    // Call our API route (credentials sent in headers)
     const response = await fetch('/api/jira/epics', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Jira-Email': email,
+        'X-Jira-Token': token,
       },
       body: JSON.stringify(payload),
     }).catch((fetchError) => {
@@ -159,18 +169,28 @@ export async function fetchEpicsFromBoard(
 
 /**
  * Fetch stories (issues) associated with an epic
- * Note: Email and token are now read from httpOnly cookies by the API
+ * Note: Email and token are now sent in headers from localStorage
  */
 export async function fetchStoriesFromEpic(
   epicKey: string,
   domain: string
 ): Promise<JiraStory[]> {
+  // Get credentials from localStorage
+  const { getSavedCredentials } = await import('./credentials-manager')
+  const { email, token } = getSavedCredentials()
+  
+  if (!email || !token) {
+    throw new Error('No hay credenciales guardadas. Por favor, configura tus credenciales de Jira primero.')
+  }
+
   try {
-    // Call our API route (credentials are read from httpOnly cookies)
+    // Call our API route (credentials sent in headers)
     const response = await fetch('/api/jira/stories', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Jira-Email': email,
+        'X-Jira-Token': token,
       },
       body: JSON.stringify({
         domain,
@@ -210,7 +230,7 @@ export async function fetchStoriesFromEpic(
 
 /**
  * Fetch users from a Jira project
- * Note: Email and token are now read from httpOnly cookies by the API
+ * Note: Email and token are now sent in headers from localStorage
  */
 export async function fetchJiraUsers(
   boardUrl: string
@@ -223,12 +243,22 @@ export async function fetchJiraUsers(
     throw new Error('No se pudo extraer la clave del proyecto de la URL')
   }
 
+  // Get credentials from localStorage
+  const { getSavedCredentials } = await import('./credentials-manager')
+  const { email, token } = getSavedCredentials()
+  
+  if (!email || !token) {
+    throw new Error('No hay credenciales guardadas. Por favor, configura tus credenciales de Jira primero.')
+  }
+
   try {
-    // Call our API route (credentials are read from httpOnly cookies)
+    // Call our API route (credentials sent in headers)
     const response = await fetch('/api/jira/users', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Jira-Email': email,
+        'X-Jira-Token': token,
       },
       body: JSON.stringify({
         domain,
